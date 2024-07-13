@@ -7,6 +7,7 @@ import { prisma } from '../prisma';
 import { SendGridProvider } from './email';
 import { DateTime } from 'luxon';
 import { cron } from '../scheduler';
+import { NotificationProvider } from '../types';
 
 const subjects = readYaml(`${config.app.templateRoot}/subjects.yaml`);
 
@@ -188,14 +189,6 @@ class NotificationContext {
       );
     }
   }
-}
-
-export abstract class NotificationProvider {
-  abstract send(
-    subject: string,
-    content: { [contentType: string]: string },
-    recipients: string | string[]
-  ): Promise<void>;
 }
 
 const notificationService = new NotificationService(config.app.templateRoot, format);

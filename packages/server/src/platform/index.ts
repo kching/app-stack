@@ -1,14 +1,14 @@
-import express, { json, static as staticResource } from "express";
-import { config } from "./config";
-import { createServer } from "http";
-import { WebSocketServer } from "ws";
-import { WebSocketRouter } from "./wsRouter";
-import cookieParser from "cookie-parser";
-import { initialise, Plugin } from "./plugin";
-import { flatten } from "lodash";
-import { getLogger } from "./logger";
-import passport from "passport";
-import { jwt } from "./auth";
+import express, { json, static as staticResource } from 'express';
+import { config } from './config';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
+import { WebSocketRouter } from './wsRouter';
+import cookieParser from 'cookie-parser';
+import { initialise, Plugin } from './plugin';
+import { flatten } from 'lodash';
+import { getLogger } from './logger';
+import passport from 'passport';
+import auth, { jwt } from './auth';
 
 const app = express();
 const httpServer = createServer(app);
@@ -41,21 +41,19 @@ class Platform {
     return this;
   }
   async start(port?: number) {
-    const result = await Promise.all(
-      this._extensions.map((extensionRoot) => initialise(extensionRoot)),
-    );
+    const authPlugin = new Plugin('auth', auth);
+    await authPlugin.withRouter(router).start();
+
+    const result = await Promise.all(this._extensions.map((extensionRoot) => initialise(extensionRoot)));
     const plugins = flatten(result)
-      .filter((r) => r.status === "fulfilled")
-      .filter((settledResult) => settledResult.status === "fulfilled")
-      .map(
-        (fulfilledResult) =>
-          (fulfilledResult as PromiseFulfilledResult<Plugin>).value,
-      )
+      .filter((r) => r.status === 'fulfilled')
+      .filter((settledResult) => settledResult.status === 'fulfilled')
+      .map((fulfilledResult) => (fulfilledResult as PromiseFulfilledResult<Plugin>).value)
       .filter((plugin) => plugin != null);
     await Promise.allSettled(
       plugins.map((plugin) => {
         plugin.withRouter(router).withWebSocketRouter(wsRouter).start();
-      }),
+      })
     );
     plugins.forEach((plugin) => {
       this._plugins[plugin.id] = plugin;
@@ -69,7 +67,7 @@ class Platform {
     httpServer.listen(resolvedPort, () => {
       getLogger().info(`App server running on port ${resolvedPort}`);
     });
-    process.on("SIGINT", () => {
+    process.on('SIGINT', () => {
       httpServer.close(this._onShutdown);
     });
     return this;

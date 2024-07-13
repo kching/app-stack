@@ -1,7 +1,7 @@
 import sendGridMail from '@sendgrid/mail';
 import { config } from '../config';
 import { getLogger } from '../logger';
-import { NotificationProvider } from './index';
+import { NotificationProvider } from '../types';
 
 type EmailContent = {
   text: string;
