@@ -1,4 +1,4 @@
-import { Plugin } from "./plugin";
+import {ExecutionContext, Plugin} from "./plugin";
 
 describe('plugin', () => {
 
@@ -12,7 +12,7 @@ describe('plugin', () => {
 
   it('should start', async () => {
     const startFn = jest.fn();
-    const pluginFn = function(this: Plugin)  {
+    const pluginFn = function(this: ExecutionContext)  {
       this.onStart(startFn);
     }
     const plugin = new Plugin('test', pluginFn, {});
@@ -23,7 +23,7 @@ describe('plugin', () => {
 
   it('should stop', async () => {
     const stopFn = jest.fn();
-    const pluginFn = function(this: Plugin)  {
+    const pluginFn = function(this: ExecutionContext)  {
       this.onStop(stopFn);
     }
     const plugin = new Plugin('test', pluginFn, {});

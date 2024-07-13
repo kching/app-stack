@@ -1,7 +1,8 @@
-import fs from 'fs';
-import { parse } from 'yaml';
 import path from 'path';
+import dotenv from 'dotenv';
+import {readYaml} from "./fileUtils";
 
+const dotEnvConfig = dotenv.config();
 const paths = ['default.yaml'];
 if (process.env.NODE_ENV) {
   paths.push(`${process.env.NODE_ENV}.yaml`);
@@ -9,30 +10,31 @@ if (process.env.NODE_ENV) {
 
 export type Config = {
   app: {
-    name: string;
+    domain: string;
     port: number;
+    apiRoot: string;
+    staticRoot: string;
+    extensions: string[];
   };
   logging: {
     level: string;
   };
-  services: {
-    [key: string]: { [key: string]: any };
+  auth: {
+    issuer: string;
+    tokenMaxAge: number;
+  }
+  env: {
+    [key: string]: { [key: string]: string };
   }
   [key: string]: { [key: string]: any };
 };
 
-export const readYaml = (configPath: string) => {
-  if (fs.existsSync(configPath)) {
-    const configContent = fs.readFileSync(configPath, { encoding: 'utf-8' });
-    return parse(configContent);
-  } else return null;
-};
 export const loadConfig = <T>(...configPaths: string[]): T => {
   const configs = configPaths
     .map((configPath: string) => path.join(process.cwd(), 'config', configPath))
     .map((configPath) => readYaml(configPath))
     .filter((config) => config !== null);
-  return Object.assign({}, ...configs);
+  return Object.assign({}, ...configs, { env: dotEnvConfig.parsed});
 };
 
 export const config = loadConfig<Config>(...paths);

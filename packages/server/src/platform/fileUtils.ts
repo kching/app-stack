@@ -1,5 +1,6 @@
 import fs, { Dirent } from 'fs';
 import path from 'path';
+import {parse} from "yaml";
 
 const isTestFile = (entry: Dirent) => {
   return (
@@ -10,8 +11,8 @@ const isTestFile = (entry: Dirent) => {
 
 export const scanForFiles = async (
   directory: string,
+  filter: (file: Dirent) => boolean = () => true,
   result: Promise<string[]> = Promise.resolve([]),
-  filter: (file: Dirent) => boolean = () => true
 ): Promise<string[]> => {
   let entries: Dirent[] = (
     await fs.promises.readdir(directory, {
@@ -20,14 +21,21 @@ export const scanForFiles = async (
   ).sort();
   return await entries.reduce(async (result, entry) => {
     const entryPath = path.join(directory, entry.name);
-    if (entry.isFile() && (filter ? filter(entry) : true)) {
+    if (entry.isFile() && filter(entry)) {
       result.then((result) => {
         result.push(entryPath);
         return result;
       });
     } else if (entry.isDirectory() && !isTestFile(entry)) {
-      return scanForFiles(entryPath, result, filter);
+      return scanForFiles(entryPath, filter, result);
     }
     return result;
   }, result);
+};
+
+export const readYaml = (path: string) => {
+  if (fs.existsSync(path)) {
+    const configContent = fs.readFileSync(path, { encoding: 'utf-8' });
+    return parse(configContent);
+  } else return null;
 };

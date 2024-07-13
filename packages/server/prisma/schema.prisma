@@ -12,3 +12,30 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id             Int          @id @default(autoincrement())
+  uid            String       @unique @default(cuid())
+  enabled        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  lastAccessedAt DateTime?
+  authMethods    AuthScheme[]
+  displayName    String       @default("")
+}
+
+model AuthScheme {
+  id           Int     @id @default(autoincrement())
+  userId       Int
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheme       String
+  username     String
+  secret       String
+  pendingReset Boolean @default(false)
+
+  @@unique([scheme, username])
+}
+
+model ExpiredTokens {
+  token        String   @id
+  expiredSince DateTime @default(now())
+}

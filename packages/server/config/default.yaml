@@ -1,6 +1,14 @@
 app:
-  name: 'App'
+  domain: 'app.example.org'
   port: 3000
+  apiRoot: '/api'
+  staticRoot: 'public'
+  extensions:
+    - './src/extensions'
 
 logging:
   level: 'debug'
+
+auth:
+  issuer: 'app.example.org'
+  tokenMaxAge: 86400
