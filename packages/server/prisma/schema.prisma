@@ -44,11 +44,12 @@ model ExpiredTokens {
 }
 
 model Contact {
-  id      Int    @id
-  userId  Int
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel String
-  address String
+  id       Int     @id
+  userId   Int
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel  String
+  address  String
+  verified Boolean @default(false)
 }
 
 model Subscriptions {

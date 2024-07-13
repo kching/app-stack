@@ -7,8 +7,9 @@ app:
   extensions:
     - './src/extensions'
 
-email:
-  from: 'no-reply@example.org'
+notification:
+  fromEmail: 'no-reply@example.org'
+  outBoundRetentionDays: 7
 
 logging:
   level: 'debug'

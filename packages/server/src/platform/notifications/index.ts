@@ -5,17 +5,30 @@ import { readYaml, scanForFiles } from '../fileUtils';
 import path from 'path';
 import { prisma } from '../prisma';
 import { SendGridProvider } from './email';
+import { DateTime } from 'luxon';
+import { cron } from '../scheduler';
 
 const subjects = readYaml(`${config.app.templateRoot}/subjects.yaml`);
-const channelTemplates: {
-  [channelName: string]: { [templateName: string]: compileTemplate };
-} = {};
 
 type Channel = {
   contentTypes: string[];
   provider: NotificationProvider;
   templates: { [templateName: string]: compileTemplate };
 };
+
+const purgeOldData = async (cutOff: Date) => {
+  await prisma.messageOutBox.deleteMany({
+    where: {
+      sentAt: { lt: cutOff },
+    },
+  });
+};
+purgeOldData(DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate()).then(() => {
+  cron('0 0 0 * * *', async () => {
+    const cutOff = DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate();
+    await purgeOldData(cutOff);
+  });
+});
 
 const loadTemplates = async (templateRoot: string, channelName: string) => {
   const filePaths = await scanForFiles(`${templateRoot}/${channelName}`, (file) => file.name.endsWith('.pug'));
@@ -30,11 +43,10 @@ const loadTemplates = async (templateRoot: string, channelName: string) => {
 };
 
 type Formatter = typeof format;
-const format = (templateName: string, channel: string, data: { [key: string]: any }, contentType = 'html') => {
-  const templates = channelTemplates[channel];
-  if (templates) {
-    const lookupName = templateName + '.' + contentType;
-    const template = templates[lookupName];
+const format = (templateName: string, channel: Channel, data: { [key: string]: any }, contentType = 'html') => {
+  const lookupName = templateName + '.' + contentType;
+  const template = channel.templates[lookupName];
+  if (template) {
     return template(data);
   }
   return null;
@@ -106,7 +118,7 @@ export class NotificationService {
       const subject = subjects[templateName];
       const contentPayload = channel.contentTypes.reduce(
         (result, contentType) => {
-          const contentFragment = format(templateName, channelName, data, contentType);
+          const contentFragment = format(templateName, channel, data, contentType);
           if (contentFragment) {
             result[contentType] = contentFragment;
           }
