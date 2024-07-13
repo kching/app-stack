@@ -3,8 +3,12 @@ app:
   port: 3000
   apiRoot: '/api'
   staticRoot: 'public'
+  templateRoot: 'src/templates'
   extensions:
     - './src/extensions'
+
+email:
+  from: 'no-reply@example.org'
 
 logging:
   level: 'debug'

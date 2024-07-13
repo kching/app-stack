@@ -9,7 +9,6 @@ import { flatten } from "lodash";
 import { getLogger } from "./logger";
 import passport from "passport";
 import { jwt } from "./auth";
-import { cron } from "./scheduler";
 
 const app = express();
 const httpServer = createServer(app);

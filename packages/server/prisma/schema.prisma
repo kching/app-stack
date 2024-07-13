@@ -14,13 +14,15 @@ datasource db {
 }
 
 model User {
-  id             Int          @id @default(autoincrement())
-  uid            String       @unique @default(cuid())
-  enabled        Boolean      @default(true)
-  createdAt      DateTime     @default(now())
+  id             Int             @id @default(autoincrement())
+  uid            String          @unique @default(cuid())
+  enabled        Boolean         @default(true)
+  createdAt      DateTime        @default(now())
   lastAccessedAt DateTime?
-  authMethods    AuthScheme[]
-  displayName    String       @default("")
+  authSchemes    AuthScheme[]
+  displayName    String          @default("")
+  contacts       Contact[]
+  subscriptions  Subscriptions[]
 }
 
 model AuthScheme {
@@ -33,9 +35,39 @@ model AuthScheme {
   pendingReset Boolean @default(false)
 
   @@unique([scheme, username])
+  @@unique([scheme, userId])
 }
 
 model ExpiredTokens {
   token        String   @id
   expiredSince DateTime @default(now())
+}
+
+model Contact {
+  id      Int    @id
+  userId  Int
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel String
+  address String
+}
+
+model Subscriptions {
+  id      Int     @id
+  userId  Int
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   String
+  channel String
+  enabled Boolean
+}
+
+model MessageOutBox {
+  id           Int       @id @default(autoincrement())
+  templateName String
+  channelName  String
+  data         String
+  address      String
+  sentAt       DateTime  @default(now())
+  lastSentAt   DateTime?
+  status       String    @default("pending")
+  errorCount   Int       @default(0)
 }

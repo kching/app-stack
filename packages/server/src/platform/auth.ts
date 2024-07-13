@@ -55,6 +55,9 @@ export const jwt = () => {
         done(null, null);
       } else {
         const user = await prisma.user.findUnique({
+          include: {
+            authSchemes: true,
+          },
           where: {
             uid: jwtPayload.sub as string,
           },
