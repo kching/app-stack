@@ -9,7 +9,7 @@ import { readYaml } from './fileUtils';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
 import { notify } from './notifications';
-import Jwt from 'jsonwebtoken';
+import Jwt, { JwtPayload } from 'jsonwebtoken';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -21,37 +21,11 @@ const fromCookieAsToken = (req: CookieRequest) => {
   }
 };
 
-const findAuthByScheme = async (scheme: string, username: string) => {
-  return prisma.authScheme.findUnique({
-    include: { user: true },
-    where: {
-      scheme_username: {
-        scheme,
-        username,
-      },
-    },
-  });
-};
-
-const createUser = async (scheme: string, username: string, secret: string) => {
-  return prisma.user.create({
-    data: {
-      authSchemes: {
-        create: {
-          scheme,
-          username,
-          secret,
-        },
-      },
-    },
-  });
-};
-
 const purgeExpiredTokens = async () => {
   prisma.expiredTokens.deleteMany({
     where: {
       expiredSince: {
-        lt: new Date(Date.now() - config.auth.tokenMaxAge * 1000),
+        lt: new Date(Date.now() - config.auth.sessionMaxAgeSeconds * 1000),
       },
     },
   });
@@ -105,6 +79,59 @@ export const jwt = () => {
 // }
 
 export default function (this: ExecutionContext) {
+  const findAuthByScheme = async (scheme: string, username: string) => {
+    return prisma.authScheme.findUnique({
+      include: { user: true },
+      where: {
+        scheme_username: {
+          scheme,
+          username,
+        },
+      },
+    });
+  };
+  const createUser = async (scheme: string, username: string, secret: string) => {
+    return prisma.user.create({
+      data: {
+        authSchemes: {
+          create: {
+            scheme,
+            username,
+            secret,
+          },
+        },
+      },
+    });
+  };
+  const findUserByUid = (uid: string, enabled = true) => {
+    return prisma.user.findUnique({
+      where: { uid, enabled },
+    });
+  };
+  const createAccessToken = (user: User, secret: string) => {
+    return Jwt.sign(
+      {
+        displayName: user.displayName,
+        permissions: [],
+      },
+      secret,
+      {
+        subject: user.uid,
+        issuer: config.auth.issuer,
+        audience: config.app.domain,
+        expiresIn: config.auth.tokenMaxAgeSeconds,
+      }
+    );
+  };
+  const createRefreshToken = (user: User, secret: string) => {
+    return Jwt.sign({}, secret, {
+      subject: user.uid,
+      issuer: config.auth.issuer,
+      audience: config.app.domain,
+      expiresIn: config.auth.sessionMaxAgeSeconds,
+    });
+  };
+
   this.onStart(async () => {
     const defaultUsers = readYaml('./config/users.yaml');
     if (defaultUsers) {
@@ -124,55 +151,77 @@ export default function (this: ExecutionContext) {
   });
 
   this.useEndpoint('post', '/login', async (req, res) => {
-    if (req.body == null) {
-      res.status(400).send({ message: 'Expects username and password' });
+    const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
+    let refreshToken = req.cookies['refresh-token'];
+    let user: User | null = null;
+    if (refreshToken) {
+      const payload = Jwt.verify(refreshToken, JWT_SECRET, {
+        audience: config.app.domain,
+        clockTolerance: 6000,
+      });
+      user = await findUserByUid(payload.sub as string);
+    } else if (req.body) {
+      const { username, password } = req.body;
+      if (username && username.trim().length > 0 && password && password.trim().length > 0) {
+        const auth = await findAuthByScheme('local', username);
+        if (auth && bcrypt.compareSync(password, auth.secret)) {
+          user = auth.user.enabled ? auth.user : null;
+        }
+      } else {
+        res.status(400).send({
+          message: 'Expects username and password',
+        });
+        return;
+      }
+    } else {
+      res.status(400).send({ message: 'Expects username and password or refresh-token in cookie' });
       return;
     }
-    const { username, password } = req.body;
-    const auth = await findAuthByScheme('local', username);
-    const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
-    if (auth && bcrypt.compareSync(password, auth.secret)) {
-      const token = Jwt.sign(
-        {
-          displayName: auth.user.displayName,
-        },
-        JWT_SECRET,
-        {
-          subject: auth.user.uid,
-          issuer: config.auth.issuer,
-          audience: config.app.domain,
-          expiresIn: config.auth.tokenMaxAge,
-        }
-      );
+
+    if (user) {
+      if (!refreshToken) {
+        refreshToken = createRefreshToken(user, JWT_SECRET);
+      }
+      const accessToken = createAccessToken(user, JWT_SECRET);
       res
         .status(200)
-        .cookie('access-token', token, {
-          maxAge: config.auth.tokenMaxAge * 1000,
+        .cookie('access-token', accessToken, {
+          maxAge: config.auth.tokenMaxAgeSeconds * 1000,
+          httpOnly: true,
+          secure: true,
+        })
+        .cookie('refresh-token', refreshToken, {
+          maxAge: config.auth.sessionMaxAgeSeconds * 1000,
           httpOnly: true,
           secure: true,
         })
         .json({
-          accessToken: token,
+          accessToken: accessToken,
+          refreshToken: refreshToken,
         });
     } else {
-      res.status(401).json({
-        _links: {
-          login: '/login',
-        },
-      });
+      res.status(401);
     }
   }).withAuthentication(null);
 
   this.useEndpoint('post', '/logout', async (req, res) => {
-    const token = req.header('Authorization') || req.cookies['access-token'];
-    if (token) {
+    const accessToken = req.header('Authorization') || req.cookies['access-token'];
+    const refreshToken = req.cookies['refresh-token'];
+    if (accessToken) {
       await prisma.expiredTokens.upsert({
-        where: { token },
-        create: { token },
+        where: { token: accessToken },
+        create: { token: accessToken },
         update: {},
       });
     }
-    res.status(200).clearCookie('access-token').end();
+    if (refreshToken) {
+      await prisma.expiredTokens.upsert({
+        where: { token: refreshToken },
+        create: { token: refreshToken },
+        update: {},
+      });
+    }
+    res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
   });
 
   this.useEndpoint('post', '/password', async (req, res) => {

@@ -26,7 +26,8 @@ export type Config = {
   };
   auth: {
     issuer: string;
-    tokenMaxAge: number;
+    tokenMaxAgeSeconds: number;
+    sessionMaxAgeSeconds: number;
   };
   env: {
     [key: string]: { [key: string]: string };

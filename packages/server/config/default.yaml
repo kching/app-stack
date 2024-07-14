@@ -16,4 +16,5 @@ logging:
 
 auth:
   issuer: 'app.example.org'
-  tokenMaxAge: 86400
+  tokenMaxAgeSeconds: 300
+  sessionMaxAgeSeconds: 86400
