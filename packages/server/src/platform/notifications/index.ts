@@ -198,7 +198,7 @@ export const notify = (recipient: User) => new NotificationContext(recipient);
 
 export const notifyEvent = async (recipient: User, event: string) => {
   const context = new NotificationContext(recipient);
-  const subscriptions = await prisma.subscriptions.findMany({
+  const subscriptions = await prisma.subscription.findMany({
     select: {
       channel: true,
     },

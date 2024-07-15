@@ -18,3 +18,5 @@ auth:
   issuer: 'app.example.org'
   tokenMaxAgeSeconds: 300
   sessionMaxAgeSeconds: 86400
+  defaultUsers:
+    - 'kai.y.ching@gmail.com/Welcome123!'

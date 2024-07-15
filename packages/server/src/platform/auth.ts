@@ -22,7 +22,7 @@ const fromCookieAsToken = (req: CookieRequest) => {
 };
 
 const purgeExpiredTokens = async () => {
-  prisma.expiredTokens.deleteMany({
+  prisma.expiredToken.deleteMany({
     where: {
       expiredSince: {
         lt: new Date(Date.now() - config.auth.sessionMaxAgeSeconds * 1000),
@@ -48,7 +48,7 @@ export const jwt = () => {
   return new JwtStrategy(options, async (req, jwtPayload, done) => {
     try {
       const token = req.header('Authorization')?.substring(7) || req.cookies['access-token'];
-      const expiredToken = await prisma.expiredTokens.findUnique({
+      const expiredToken = await prisma.expiredToken.findUnique({
         where: { token },
       });
       if (expiredToken) {
@@ -133,10 +133,10 @@ export default function (this: ExecutionContext) {
   };
 
   this.onStart(async () => {
-    const defaultUsers = readYaml('./config/users.yaml');
+    const defaultUsers = config.auth.defaultUsers ?? [];
     if (defaultUsers) {
       return Promise.allSettled(
-        defaultUsers.users.map(async (user: string) => {
+        defaultUsers.map(async (user: string) => {
           const [username, secret] = user.split('/');
           if (username.trim().length > 0 && secret.trim().length > 0) {
             const user = await findAuthByScheme('local', username);
@@ -208,14 +208,14 @@ export default function (this: ExecutionContext) {
     const accessToken = req.header('Authorization') || req.cookies['access-token'];
     const refreshToken = req.cookies['refresh-token'];
     if (accessToken) {
-      await prisma.expiredTokens.upsert({
+      await prisma.expiredToken.upsert({
         where: { token: accessToken },
         create: { token: accessToken },
         update: {},
       });
     }
     if (refreshToken) {
-      await prisma.expiredTokens.upsert({
+      await prisma.expiredToken.upsert({
         where: { token: refreshToken },
         create: { token: refreshToken },
         update: {},

@@ -14,15 +14,57 @@ datasource db {
 }
 
 model User {
-  id             Int             @id @default(autoincrement())
-  uid            String          @unique @default(cuid())
-  enabled        Boolean         @default(true)
-  createdAt      DateTime        @default(now())
+  id             Int            @id @default(autoincrement())
+  uid            String         @unique @default(cuid())
+  enabled        Boolean        @default(true)
   lastAccessedAt DateTime?
+  displayName    String         @default("")
+  isSystemUser   Boolean        @default(false)
   authSchemes    AuthScheme[]
-  displayName    String          @default("")
   contacts       Contact[]
-  subscriptions  Subscriptions[]
+  subscriptions  Subscription[]
+  memberOf       UserGroup[]
+  createdById    Int
+  createdAt      DateTime       @default(now())
+}
+
+model Group {
+  id          Int         @id @default(autoincrement())
+  uid         String      @unique @default(cuid())
+  label       String
+  description String?
+  members     UserGroup[]
+  createdById Int
+  createdAt   DateTime    @default(now())
+}
+
+model UserGroup {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  groupId     Int
+  createdById Int
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+  group       Group    @relation(fields: [groupId], references: [id])
+}
+
+model Permission {
+  id        Int    @id @default(autoincrement())
+  uid       String @default(cuid())
+  principal String // either users/<cuid> or groups/<cuid>
+  resource  String // <resourceType>/<cuid> | *
+  values    Int // bitmast of execute|delete|update|create|read
+
+  @@unique([principal, resource], name: "searchBy")
+}
+
+model Contact {
+  id       Int     @id
+  userId   Int
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel  String
+  address  String
+  verified Boolean @default(false)
 }
 
 model AuthScheme {
@@ -38,21 +80,12 @@ model AuthScheme {
   @@unique([scheme, userId])
 }
 
-model ExpiredTokens {
+model ExpiredToken {
   token        String   @id
   expiredSince DateTime @default(now())
 }
 
-model Contact {
-  id       Int     @id
-  userId   Int
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel  String
-  address  String
-  verified Boolean @default(false)
-}
-
-model Subscriptions {
+model Subscription {
   id      Int     @id
   userId  Int
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
