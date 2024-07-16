@@ -29,6 +29,8 @@ export type Config = {
     tokenMaxAgeSeconds: number;
     sessionMaxAgeSeconds: number;
     defaultUsers: string[];
+    rootUser: string;
+    anonymousUser: string;
   };
   env: {
     [key: string]: { [key: string]: string };

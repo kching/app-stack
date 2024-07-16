@@ -1,15 +1,13 @@
-import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
-import { Strategy as BearerStrategy } from 'passport-http-bearer';
+import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
 import { config } from './config';
-import fromExtractors = ExtractJwt.fromExtractors;
 import { prisma } from './prisma';
 import { cron } from './scheduler';
 import { ExecutionContext } from './plugin';
-import { readYaml } from './fileUtils';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
 import { notify } from './notifications';
-import Jwt, { JwtPayload } from 'jsonwebtoken';
+import Jwt from 'jsonwebtoken';
+import fromExtractors = ExtractJwt.fromExtractors;
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -78,7 +76,31 @@ export const jwt = () => {
 //   });
 // }
 
-export default function (this: ExecutionContext) {
+export default async function (this: ExecutionContext) {
+  const createRootUserIfMissing = async (rootUID: string) => {
+    return prisma.user.upsert({
+      where: {
+        uid: rootUID,
+      },
+      update: {},
+      create: {
+        uid: rootUID,
+        createdByUid: rootUID,
+      },
+    });
+  };
+  const createAnonymousUserIfMissing = async (anonymousUID: string, createdByUid: string) => {
+    return prisma.user.upsert({
+      where: {
+        uid: anonymousUID,
+      },
+      update: {},
+      create: {
+        uid: anonymousUID,
+        createdByUid,
+      },
+    });
+  };
   const findAuthByScheme = async (scheme: string, username: string) => {
     return prisma.authScheme.findUnique({
       include: { user: true },
@@ -90,7 +112,7 @@ export default function (this: ExecutionContext) {
       },
     });
   };
-  const createUser = async (scheme: string, username: string, secret: string) => {
+  const createUser = async (scheme: string, username: string, secret: string, createdByUid: string) => {
     return prisma.user.create({
       data: {
         authSchemes: {
@@ -100,6 +122,7 @@ export default function (this: ExecutionContext) {
             secret,
           },
         },
+        createdByUid,
       },
     });
   };
@@ -132,6 +155,9 @@ export default function (this: ExecutionContext) {
     });
   };
 
+  const rootUser = await createRootUserIfMissing(config.auth.rootUser);
+  await createAnonymousUserIfMissing(config.auth.anonymousUser, rootUser.uid);
+
   this.onStart(async () => {
     const defaultUsers = config.auth.defaultUsers ?? [];
     if (defaultUsers) {
@@ -142,7 +168,7 @@ export default function (this: ExecutionContext) {
             const user = await findAuthByScheme('local', username);
             if (user == null) {
               const hashedPassword = await bcrypt.hash(secret, 12);
-              await createUser('local', username, hashedPassword);
+              await createUser('local', username, hashedPassword, rootUser.uid);
             }
           }
         })

@@ -19,12 +19,11 @@ model User {
   enabled        Boolean        @default(true)
   lastAccessedAt DateTime?
   displayName    String         @default("")
-  isSystemUser   Boolean        @default(false)
   authSchemes    AuthScheme[]
   contacts       Contact[]
   subscriptions  Subscription[]
   memberOf       UserGroup[]
-  createdById    Int
+  createdByUid   String
   createdAt      DateTime       @default(now())
 }
 
@@ -50,7 +49,7 @@ model UserGroup {
 
 model Permission {
   id        Int    @id @default(autoincrement())
-  uid       String @default(cuid())
+  uid       String @unique @default(cuid())
   principal String // either users/<cuid> or groups/<cuid>
   resource  String // <resourceType>/<cuid> | *
   values    Int // bitmast of execute|delete|update|create|read
@@ -60,6 +59,7 @@ model Permission {
 
 model Contact {
   id       Int     @id
+  uid      String  @unique @default(cuid())
   userId   Int
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel  String
