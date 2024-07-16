@@ -76,6 +76,27 @@ export const jwt = () => {
 //   });
 // }
 
+export const findUserByUid = async (uid: string, enabled = true) => {
+  return prisma.user.findUnique({
+    where: { uid },
+  });
+};
+
+export const createUser = async (scheme: string, username: string, secret: string, createdByUid: string) => {
+  return prisma.user.create({
+    data: {
+      authSchemes: {
+        create: {
+          scheme,
+          username,
+          secret,
+        },
+      },
+      createdByUid,
+    },
+  });
+};
+
 export default async function (this: ExecutionContext) {
   const createRootUserIfMissing = async (rootUID: string) => {
     return prisma.user.upsert({
@@ -110,25 +131,6 @@ export default async function (this: ExecutionContext) {
           username,
         },
       },
-    });
-  };
-  const createUser = async (scheme: string, username: string, secret: string, createdByUid: string) => {
-    return prisma.user.create({
-      data: {
-        authSchemes: {
-          create: {
-            scheme,
-            username,
-            secret,
-          },
-        },
-        createdByUid,
-      },
-    });
-  };
-  const findUserByUid = (uid: string, enabled = true) => {
-    return prisma.user.findUnique({
-      where: { uid, enabled },
     });
   };
   const createAccessToken = (user: User, secret: string) => {
