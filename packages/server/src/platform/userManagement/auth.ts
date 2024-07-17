@@ -2,7 +2,7 @@ import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
 import { config } from '../config';
 import { platformPrisma as prisma } from '../prisma';
 import { cron } from '../scheduler';
-import { ExecutionContext } from '../plugin';
+import { Service } from '../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
 import { notify } from '../notifications';
@@ -113,7 +113,7 @@ export const createUser = async (createdByUid: string, scheme: string, username:
   }
 };
 
-export default async function (this: ExecutionContext) {
+export default async function (this: Service) {
   const createRootUserIfMissing = async (rootUID: string) => {
     return prisma.user.upsert({
       where: {

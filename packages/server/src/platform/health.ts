@@ -1,17 +1,17 @@
-import { ExecutionContext } from "../platform/plugin";
-import pkg from "../../package.json";
+import { Service } from '../platform/plugin';
+import pkg from '../../package.json';
 
 const getVersion = () => {
   return pkg.version;
 };
 
-export default function (this: ExecutionContext) {
+export default function (this: Service) {
   const version = getVersion();
   this.logger.info(`Server version ${version}`);
 
-  this.useEndpoint("get", "/health", (req, res) => {
+  this.useEndpoint('get', '/health', (req, res) => {
     res.status(200).json({
-      status: "ok",
+      status: 'ok',
       version,
     });
   }).withAuthentication(null);

@@ -42,11 +42,12 @@ class Platform {
     return this;
   }
 
-  private readonly services = [new Plugin('health', health), new Plugin('auth', auth)];
+  private readonly corePlugins = [new Plugin('health', health), new Plugin('auth', auth)];
+
   async start(port?: number) {
     try {
       await Promise.all(
-        this.services.map((service) => service.withRouter(router).withWebSocketRouter(wsRouter).start())
+        this.corePlugins.map((service) => service.withRouter(router).withWebSocketRouter(wsRouter).start())
       );
     } catch (error) {
       getLogger().error('Failed to initialize platform service', error);
@@ -54,17 +55,17 @@ class Platform {
     }
 
     const result = await Promise.all(this._extensions.map((extensionRoot) => initialise(extensionRoot)));
-    const plugins = flatten(result)
+    const extensions = flatten(result)
       .filter((r) => r.status === 'fulfilled')
       .filter((settledResult) => settledResult.status === 'fulfilled')
       .map((fulfilledResult) => (fulfilledResult as PromiseFulfilledResult<Plugin>).value)
       .filter((plugin) => plugin != null);
     await Promise.allSettled(
-      plugins.map((plugin) => {
+      extensions.map((plugin) => {
         plugin.withRouter(router).withWebSocketRouter(wsRouter).start();
       })
     );
-    plugins.forEach((plugin) => {
+    extensions.forEach((plugin) => {
       this._plugins[plugin.id] = plugin;
     });
     const resolvedPort = port ?? config.app.port;
@@ -82,8 +83,8 @@ class Platform {
         httpServer.close(() => resolve(sig));
       });
       httpServerShutdown
-        .then(() => Promise.allSettled(plugins.map((p) => p.stop())))
-        .then(() => Promise.allSettled(this.services.map((service) => service.stop())))
+        .then(() => Promise.allSettled(extensions.map((p) => p.stop())))
+        .then(() => Promise.allSettled(this.corePlugins.map((service) => service.stop())))
         .then(() => {
           if (typeof this._onShutdown === 'function') {
             return this._onShutdown();

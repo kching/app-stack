@@ -37,7 +37,7 @@ type WebSocketEndpointRegistration = {
 
 type PluginStatus = 'created' | 'starting' | 'started' | 'stopping' | 'stopped';
 
-export type ExecutionContext = {
+export type Service = {
   id: string;
   logger: Logger;
   onStart: typeof Plugin.prototype.onStart;
@@ -47,7 +47,7 @@ export type ExecutionContext = {
   scheduleTask: (schedule: number | string, task: () => void) => void;
 };
 
-type PluginFunction = (this: ExecutionContext, options?: { [key: string]: any }) => Promise<void> | void;
+type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promise<void> | void;
 
 const logger = getLogger();
 
@@ -91,7 +91,7 @@ const scheduleTask = (schedule: number | string, task: () => void): Promise<void
   }
 };
 
-const createContext = (plugin: Plugin): ExecutionContext => ({
+const createContext = (plugin: Plugin): Service => ({
   id: plugin.id,
   logger: getLogger(plugin.id),
   onStart: Plugin.prototype.onStart.bind(plugin),
@@ -106,14 +106,14 @@ export class Plugin {
   private readonly endpoints: EndpointRegistration[] = [];
   private readonly webSocketEndpoints: WebSocketEndpointRegistration[] = [];
   private readonly options: { [key: string]: any } = {};
-  private readonly executionContext: ExecutionContext;
+  private readonly executionContext: Service;
   private readonly init: Promise<string>;
 
   private _status: PluginStatus = 'created';
   private router?: Router;
   private wsRouter?: WebSocketRouter;
-  private startCallback?: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<void>;
-  private stopCallback?: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<void>;
+  private startCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
+  private stopCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
 
   constructor(id: string, func: PluginFunction, options: { [key: string]: any } = {}) {
     this._id = id;
@@ -213,11 +213,11 @@ export class Plugin {
     }
   }
 
-  onStart(handler: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<any>) {
+  onStart(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
     this.startCallback = handler;
   }
 
-  onStop(handler: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<any>) {
+  onStop(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
     this.stopCallback = handler;
   }
 }

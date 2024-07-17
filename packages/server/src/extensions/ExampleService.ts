@@ -1,6 +1,6 @@
-import { ExecutionContext } from '../platform/plugin';
+import { Service } from '../platform/plugin';
 
-export default function (this: ExecutionContext) {
+export default function (this: Service) {
   this.useEndpoint('get', '/example', (req, res) => {
     res.status(200).json({
       status: 'ok',

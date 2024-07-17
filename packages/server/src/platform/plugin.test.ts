@@ -1,7 +1,6 @@
-import {ExecutionContext, Plugin} from "./plugin";
+import { Service, Plugin } from './plugin';
 
 describe('plugin', () => {
-
   it('should call plugin initialisation function', async () => {
     const pluginFn = jest.fn();
     const plugin = new Plugin('test', pluginFn, {});
@@ -12,9 +11,9 @@ describe('plugin', () => {
 
   it('should start', async () => {
     const startFn = jest.fn();
-    const pluginFn = function(this: ExecutionContext)  {
+    const pluginFn = function (this: Service) {
       this.onStart(startFn);
-    }
+    };
     const plugin = new Plugin('test', pluginFn, {});
     await plugin.start();
     expect(plugin.status).toBe('started');
@@ -23,13 +22,13 @@ describe('plugin', () => {
 
   it('should stop', async () => {
     const stopFn = jest.fn();
-    const pluginFn = function(this: ExecutionContext)  {
+    const pluginFn = function (this: Service) {
       this.onStop(stopFn);
-    }
+    };
     const plugin = new Plugin('test', pluginFn, {});
     await plugin.start();
     await plugin.stop();
     expect(plugin.status).toBe('stopped');
     expect(stopFn).toHaveBeenCalled();
-  })
+  });
 });
