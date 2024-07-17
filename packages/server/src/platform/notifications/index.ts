@@ -3,7 +3,7 @@ import pug, { compileTemplate } from 'pug';
 import { config } from '../config';
 import { readYaml, scanForFiles } from '../fileUtils';
 import path from 'path';
-import { prisma } from '../prisma';
+import { platformPrisma as prisma } from '../prisma';
 import { SendGridProvider } from './email';
 import { DateTime } from 'luxon';
 import { cron } from '../scheduler';

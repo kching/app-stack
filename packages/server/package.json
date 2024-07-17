@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "NODE_ENV=dev nodemon src/main.ts",
     "start": "NODE_ENV=prod ts-node src/main.ts",
-    "build": "prisma generate && tsc -p tsconfig.json",
+    "build": "prisma generate --schema prisma/platform.prisma && tsc -p tsconfig.json",
+    "db:generate": "prisma generate --schema prisma/platform.prisma",
     "test": "jest --max-worker=4 --coverage"
   },
   "author": "",

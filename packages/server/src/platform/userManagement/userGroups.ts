@@ -1,4 +1,4 @@
-import { prisma } from '../prisma';
+import { platformPrisma as prisma } from '../prisma';
 import { getLogger } from '../logger';
 
 export const findGroupByUid = async (groupUid: string) => prisma.group.findUnique({ where: { uid: groupUid } });

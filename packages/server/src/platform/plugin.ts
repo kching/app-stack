@@ -1,12 +1,12 @@
 import path from 'path';
-import {RequestHandler, Router} from 'express';
-import {getLogger} from './logger';
-import {scanForFiles} from './fileUtils';
-import {WebSocketHandler, WebSocketRouter} from './wsRouter';
-import {Logger} from "winston";
-import {cron, delay} from './scheduler'
-import {ScheduledTask} from "node-cron";
-import passport from "passport";
+import { RequestHandler, Router } from 'express';
+import { getLogger } from './logger';
+import { scanForFiles } from './fileUtils';
+import { WebSocketHandler, WebSocketRouter } from './wsRouter';
+import { Logger } from 'winston';
+import { cron, delay } from './scheduler';
+import { ScheduledTask } from 'node-cron';
+import passport from 'passport';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -21,14 +21,14 @@ class EndpointRegistration {
     this.path = path;
     this.handlers = handlers;
   }
-  withAuthentication(auth : string | string[] | null) {
-    if(auth == null || Array.isArray(auth)) {
+  withAuthentication(auth: string | string[] | null) {
+    if (auth == null || Array.isArray(auth)) {
       this.authProviders = auth;
     } else {
       this.authProviders = [auth];
     }
   }
-};
+}
 
 type WebSocketEndpointRegistration = {
   path: string;
@@ -45,19 +45,18 @@ export type ExecutionContext = {
   useEndpoint: typeof Plugin.prototype.useEndpoint;
   useWebSocket: typeof Plugin.prototype.useWebsocket;
   scheduleTask: (schedule: number | string, task: () => void) => void;
-}
+};
 
-type PluginFunction = (this: ExecutionContext, options?: { [key: string]: any }) => (Promise<void> | void);
-
+type PluginFunction = (this: ExecutionContext, options?: { [key: string]: any }) => Promise<void> | void;
 
 const logger = getLogger();
 
-const registerEndpoint = (router: Router, {method, path, authProviders, handlers} : EndpointRegistration) => {
+const registerEndpoint = (router: Router, { method, path, authProviders, handlers }: EndpointRegistration) => {
   const func = (router as { [key: string]: any })[method.toLowerCase()];
   if (typeof func === 'function') {
     logger.debug(`Registering endpoint ${method.toUpperCase()} ${path}`);
-    if(authProviders != null && authProviders.length > 0) {
-      const auth = passport.authenticate(authProviders, { session: false});
+    if (authProviders != null && authProviders.length > 0) {
+      const auth = passport.authenticate(authProviders, { session: false });
       func.call(router, path, auth, ...handlers);
     } else {
       func.call(router, path, ...handlers);
@@ -72,7 +71,7 @@ export const initialise = async (pluginLocation: string, options: { [key: string
   return Promise.allSettled(
     pluginFiles.map(async (pluginPath) => {
       const extension = pluginPath.lastIndexOf('.');
-      const id = pluginPath.slice(pluginLocation.length - 1, extension > -1 ? extension : pluginPath.length -1);
+      const id = pluginPath.slice(pluginLocation.length - 1, extension > -1 ? extension : pluginPath.length - 1);
       const importPath = path.relative(__dirname, pluginPath);
       try {
         const module = await import(importPath);
@@ -80,7 +79,6 @@ export const initialise = async (pluginLocation: string, options: { [key: string
       } catch (error) {
         logger.error('Failed to load extension', error);
       }
-
     })
   );
 };
@@ -91,7 +89,7 @@ const scheduleTask = (schedule: number | string, task: () => void): Promise<void
   } else {
     return cron(schedule, task);
   }
-}
+};
 
 const createContext = (plugin: Plugin): ExecutionContext => ({
   id: plugin.id,
@@ -104,9 +102,8 @@ const createContext = (plugin: Plugin): ExecutionContext => ({
 });
 
 export class Plugin {
-
   private readonly _id;
-  private readonly endpoints: EndpointRegistration[] = []
+  private readonly endpoints: EndpointRegistration[] = [];
   private readonly webSocketEndpoints: WebSocketEndpointRegistration[] = [];
   private readonly options: { [key: string]: any } = {};
   private readonly executionContext: ExecutionContext;
@@ -116,20 +113,20 @@ export class Plugin {
   private router?: Router;
   private wsRouter?: WebSocketRouter;
   private startCallback?: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<void>;
-  private stopCallback?: (context?: ExecutionContext, options?: { [key: string]: any }) => void |Promise<void>;
+  private stopCallback?: (context?: ExecutionContext, options?: { [key: string]: any }) => void | Promise<void>;
 
   constructor(id: string, func: PluginFunction, options: { [key: string]: any } = {}) {
-    logger.debug(`Found plugin ${id}`);
     this._id = id;
     this.options = options;
 
     this.executionContext = createContext(this);
     this.init = new Promise((resolve, reject) => {
       resolve(func.call(this.executionContext, options));
-    }).then(() => 'ready')
-      .catch(error => {
+    })
+      .then(() => 'ready')
+      .catch((error) => {
         logger.warn(`Failed to load plugin ${id}`, error);
-        return 'failed'
+        return 'failed';
       });
   }
 
@@ -155,12 +152,13 @@ export class Plugin {
     const init = await this.init;
     if (init === 'ready' && (this.status === 'created' || this.status === 'stopped')) {
       this._status = 'starting';
-      this.endpoints.forEach( reg => {
+      getLogger(this.id).debug('Starting...');
+      this.endpoints.forEach((reg) => {
         if (this.router != null) {
           registerEndpoint(this.router, reg);
         }
       });
-      this.webSocketEndpoints.forEach(({path, handler}) => {
+      this.webSocketEndpoints.forEach(({ path, handler }) => {
         if (this.wsRouter != null) {
           this.wsRouter.registerEndpoint(path, handler);
         }
@@ -168,27 +166,30 @@ export class Plugin {
       if (typeof this.startCallback === 'function') {
         await this.startCallback(this.executionContext, this.options);
       }
-      this._status = 'started'
+      this._status = 'started';
     }
   }
 
   async stop() {
     if (this._status === 'started') {
       this._status = 'stopping';
+      getLogger(this.id).debug('Stopping...');
       if (typeof this.stopCallback === 'function') {
         await this.stopCallback(this.executionContext, this.options);
       }
-      this.endpoints.map(endpoint => endpoint.path).forEach(path => {
-        if (this.router && this.router.stack) {
-          let paths = this.router.stack.map((layer) => layer.route?.path);
-          while (paths.indexOf(path) > -1) {
-            this.router.stack.splice(paths.indexOf(path));
-            paths = this.router.stack.map((layer) => layer.route?.path);
+      this.endpoints
+        .map((endpoint) => endpoint.path)
+        .forEach((path) => {
+          if (this.router && this.router.stack) {
+            let paths = this.router.stack.map((layer) => layer.route?.path);
+            while (paths.indexOf(path) > -1) {
+              this.router.stack.splice(paths.indexOf(path));
+              paths = this.router.stack.map((layer) => layer.route?.path);
+            }
           }
-        }
-      });
+        });
       if (this.wsRouter) {
-        this.webSocketEndpoints.forEach(endpoint => {
+        this.webSocketEndpoints.forEach((endpoint) => {
           // this.wsRouter.unregisterEndpoint(...)
         });
       }
@@ -206,7 +207,7 @@ export class Plugin {
   }
 
   useWebsocket(path: string, handler: WebSocketHandler) {
-    this.webSocketEndpoints.push({path, handler});
+    this.webSocketEndpoints.push({ path, handler });
     if (this.wsRouter && this._status === 'started') {
       this.wsRouter.registerEndpoint(path, handler);
     }

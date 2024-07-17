@@ -27,7 +27,7 @@ class Platform {
   private _apiRoot = config.app.apiRoot;
   private _staticRoot = config.app.staticRoot;
   private _extensions: string[] = config.app.extensions;
-  private _onShutdown?: () => void | null;
+  private _onShutdown?: () => Promise<void> | void;
 
   apiRoot(root: string): Platform {
     this._apiRoot = root;
@@ -45,7 +45,9 @@ class Platform {
   private readonly services = [new Plugin('health', health), new Plugin('auth', auth)];
   async start(port?: number) {
     try {
-      await Promise.all(this.services.map((service) => service.start()));
+      await Promise.all(
+        this.services.map((service) => service.withRouter(router).withWebSocketRouter(wsRouter).start())
+      );
     } catch (error) {
       getLogger().error('Failed to initialize platform service', error);
       process.exit(1);
@@ -74,13 +76,30 @@ class Platform {
     httpServer.listen(resolvedPort, () => {
       getLogger().info(`App server running on port ${resolvedPort}`);
     });
-    process.on('SIGINT', () => {
-      httpServer.close(this._onShutdown);
-    });
+
+    const handleTermination = (sig: 'SIGINT' | 'SIGQUIT' | 'SIGTERM') => {
+      const httpServerShutdown = new Promise((resolve) => {
+        httpServer.close(() => resolve(sig));
+      });
+      httpServerShutdown
+        .then(() => Promise.allSettled(plugins.map((p) => p.stop())))
+        .then(() => Promise.allSettled(this.services.map((service) => service.stop())))
+        .then(() => {
+          if (typeof this._onShutdown === 'function') {
+            return this._onShutdown();
+          }
+          return this;
+        })
+        .then(() => process.exit(0));
+    };
+    process.on('SIGINT', () => handleTermination('SIGINT'));
+    process.on('SIGQUIT', () => handleTermination('SIGQUIT'));
+    process.on('SIGTERM', () => handleTermination('SIGTERM'));
+
     return this;
   }
 
-  onShutdown(callback: () => void) {
+  onShutdown(callback: () => Promise<void> | void) {
     this._onShutdown = callback;
   }
 }

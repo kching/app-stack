@@ -1,5 +1,7 @@
-import platform from "./platform";
+import platform from './platform';
 
-platform.start().then(platform => {
-  platform.onShutdown(() => { console.log('Application terminated')})
-})
+platform.start().then((platform) => {
+  platform.onShutdown(() => {
+    console.log('Application terminated');
+  });
+});

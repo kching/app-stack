@@ -1,6 +1,6 @@
 import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
 import { config } from '../config';
-import { prisma } from '../prisma';
+import { platformPrisma as prisma } from '../prisma';
 import { cron } from '../scheduler';
 import { ExecutionContext } from '../plugin';
 import bcrypt from 'bcryptjs';

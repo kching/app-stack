@@ -1,5 +1,5 @@
 import { findUserByUid } from './auth';
-import { prisma } from '../prisma';
+import { platformPrisma as prisma } from '../prisma';
 import { jest } from '@jest/globals';
 
 jest.mock('../notifications', () => ({
@@ -8,7 +8,7 @@ jest.mock('../notifications', () => ({
 
 jest.mock('../prisma', () => ({
   __esModule: true,
-  prisma: {
+  platformPrisma: {
     user: {
       findUnique: jest.fn(),
     },
