@@ -4,7 +4,8 @@ app:
   apiRoot: '/api'
   staticRoot: 'public'
   templateRoot: 'src/templates'
-  extensions:
+  extensionFilePattern: '*.ts'
+  extensionRoots:
     - './src/extensions'
 
 notification:

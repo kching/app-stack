@@ -113,7 +113,7 @@ export const createUser = async (createdByUid: string, scheme: string, username:
   }
 };
 
-export default async function (this: Service) {
+export async function init(this: Service) {
   const createRootUserIfMissing = async (rootUID: string) => {
     return prisma.user.upsert({
       where: {

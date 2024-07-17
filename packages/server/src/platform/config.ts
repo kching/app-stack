@@ -15,7 +15,8 @@ export type Config = {
     apiRoot: string;
     staticRoot: string;
     templateRoot: string;
-    extensions: string[];
+    extensionFilePattern: string;
+    extensionRoots: string[];
   };
   logging: {
     level: string;

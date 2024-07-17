@@ -8,8 +8,8 @@ import { initialise, Plugin } from './plugin';
 import { flatten } from 'lodash';
 import { getLogger } from './logger';
 import passport from 'passport';
-import auth, { jwt } from './userManagement/auth';
-import health from './health';
+import { init as authService, jwt } from './userManagement/auth';
+import { init as healthService } from './health';
 
 const app = express();
 const httpServer = createServer(app);
@@ -26,7 +26,7 @@ class Platform {
   private _plugins: { [id: string]: Plugin } = {};
   private _apiRoot = config.app.apiRoot;
   private _staticRoot = config.app.staticRoot;
-  private _extensions: string[] = config.app.extensions;
+  private _extensionRoots: string[] = config.app.extensionRoots;
   private _onShutdown?: () => Promise<void> | void;
 
   apiRoot(root: string): Platform {
@@ -37,12 +37,12 @@ class Platform {
     this._staticRoot = root;
     return this;
   }
-  extensions(extensions: string[]): Platform {
-    this._extensions = extensions;
+  extensionRoots(extensions: string[]): Platform {
+    this._extensionRoots = extensions;
     return this;
   }
 
-  private readonly corePlugins = [new Plugin('health', health), new Plugin('auth', auth)];
+  private readonly corePlugins = [new Plugin('health', healthService), new Plugin('auth', authService)];
 
   async start(port?: number) {
     try {
@@ -54,7 +54,7 @@ class Platform {
       process.exit(1);
     }
 
-    const result = await Promise.all(this._extensions.map((extensionRoot) => initialise(extensionRoot)));
+    const result = await Promise.all(this._extensionRoots.map((extensionRoot) => initialise(extensionRoot)));
     const extensions = flatten(result)
       .filter((r) => r.status === 'fulfilled')
       .filter((settledResult) => settledResult.status === 'fulfilled')

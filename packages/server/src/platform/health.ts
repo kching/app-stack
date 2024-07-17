@@ -5,7 +5,7 @@ const getVersion = () => {
   return pkg.version;
 };
 
-export default function (this: Service) {
+export function init(this: Service) {
   const version = getVersion();
   this.logger.info(`Server version ${version}`);
 

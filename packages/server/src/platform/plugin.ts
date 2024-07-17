@@ -7,6 +7,8 @@ import { Logger } from 'winston';
 import { cron, delay } from './scheduler';
 import { ScheduledTask } from 'node-cron';
 import passport from 'passport';
+import { config } from './config';
+import { isMatch } from 'micromatch';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -64,18 +66,21 @@ const registerEndpoint = (router: Router, { method, path, authProviders, handler
   }
 };
 
-export const initialise = async (pluginLocation: string, options: { [key: string]: any } = {}) => {
-  const pluginFiles = await scanForFiles(pluginLocation, (file) => {
-    return file.name.endsWith('.ts');
+export const initialise = async (extensionLocation: string, options: { [key: string]: any } = {}) => {
+  const pluginFiles = await scanForFiles(extensionLocation, (file) => {
+    return isMatch(file.name, config.app.extensionFilePattern);
   });
   return Promise.allSettled(
     pluginFiles.map(async (pluginPath) => {
       const extension = pluginPath.lastIndexOf('.');
-      const id = pluginPath.slice(pluginLocation.length - 1, extension > -1 ? extension : pluginPath.length - 1);
+      const id = pluginPath.slice(extensionLocation.length - 1, extension > -1 ? extension : pluginPath.length - 1);
       const importPath = path.relative(__dirname, pluginPath);
       try {
         const module = await import(importPath);
-        return new Plugin(id, module.default, options);
+        if (typeof module.init === 'function') {
+          return new Plugin(id, module.init, options);
+        }
+        return null;
       } catch (error) {
         logger.error('Failed to load extension', error);
       }
