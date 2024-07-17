@@ -49,6 +49,7 @@
     "@types/pug": "^2.0.10",
     "@types/winston": "^2.4.4",
     "@types/ws": "^8.5.10",
-    "@types/yaml": "^1.9.6"
+    "@types/yaml": "^1.9.6",
+    "jest-mock-extended": "^3.0.7"
   }
 }

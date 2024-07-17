@@ -1,11 +1,11 @@
 import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
-import { config } from './config';
-import { prisma } from './prisma';
-import { cron } from './scheduler';
-import { ExecutionContext } from './plugin';
+import { config } from '../config';
+import { prisma } from '../prisma';
+import { cron } from '../scheduler';
+import { ExecutionContext } from '../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
-import { notify } from './notifications';
+import { notify } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 
@@ -76,25 +76,41 @@ export const jwt = () => {
 //   });
 // }
 
-export const findUserByUid = async (uid: string, enabled = true) => {
-  return prisma.user.findUnique({
-    where: { uid },
-  });
+export const findUserByUid = async (uid: string, enabledUsersOnly = true) => {
+  if (enabledUsersOnly) {
+    return prisma.user.findUnique({
+      where: { uid, enabled: true },
+    });
+  } else {
+    return prisma.user.findUnique({
+      where: { uid },
+    });
+  }
 };
 
-export const createUser = async (scheme: string, username: string, secret: string, createdByUid: string) => {
-  return prisma.user.create({
-    data: {
-      authSchemes: {
-        create: {
-          scheme,
-          username,
-          secret,
-        },
-      },
-      createdByUid,
+export const createUser = async (createdByUid: string, scheme: string, username: string, secret: string) => {
+  const exists = prisma.authScheme.findFirst({
+    where: {
+      scheme,
+      username,
     },
   });
+  if (!exists) {
+    return prisma.user.create({
+      data: {
+        authSchemes: {
+          create: {
+            scheme,
+            username,
+            secret,
+          },
+        },
+        createdByUid,
+      },
+    });
+  } else {
+    throw new Error('User already exists');
+  }
 };
 
 export default async function (this: ExecutionContext) {
@@ -170,7 +186,7 @@ export default async function (this: ExecutionContext) {
             const user = await findAuthByScheme('local', username);
             if (user == null) {
               const hashedPassword = await bcrypt.hash(secret, 12);
-              await createUser('local', username, hashedPassword, rootUser.uid);
+              await createUser(rootUser.uid, 'local', username, hashedPassword);
             }
           }
         })

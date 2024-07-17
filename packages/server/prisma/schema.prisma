@@ -28,23 +28,25 @@ model User {
 }
 
 model Group {
-  id          Int         @id @default(autoincrement())
-  uid         String      @unique @default(cuid())
-  label       String
-  description String?
-  members     UserGroup[]
-  createdById Int
-  createdAt   DateTime    @default(now())
+  id           Int         @id @default(autoincrement())
+  uid          String      @unique @default(cuid())
+  label        String
+  description  String?
+  members      UserGroup[]
+  createdByUid String
+  createdAt    DateTime    @default(now())
 }
 
 model UserGroup {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  groupId     Int
-  createdById Int
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id])
-  group       Group    @relation(fields: [groupId], references: [id])
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  groupId      Int
+  createdByUId String
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+  group        Group    @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
 }
 
 model Permission {

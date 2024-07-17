@@ -8,7 +8,8 @@ import { initialise, Plugin } from './plugin';
 import { flatten } from 'lodash';
 import { getLogger } from './logger';
 import passport from 'passport';
-import auth, { jwt } from './auth';
+import auth, { jwt } from './userManagement/auth';
+import health from './health';
 
 const app = express();
 const httpServer = createServer(app);
@@ -40,9 +41,15 @@ class Platform {
     this._extensions = extensions;
     return this;
   }
+
+  private readonly services = [new Plugin('health', health), new Plugin('auth', auth)];
   async start(port?: number) {
-    const authPlugin = new Plugin('auth', auth);
-    await authPlugin.withRouter(router).start();
+    try {
+      await Promise.all(this.services.map((service) => service.start()));
+    } catch (error) {
+      getLogger().error('Failed to initialize platform service', error);
+      process.exit(1);
+    }
 
     const result = await Promise.all(this._extensions.map((extensionRoot) => initialise(extensionRoot)));
     const plugins = flatten(result)
