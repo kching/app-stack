@@ -1,13 +1,13 @@
 import { User } from '@prisma/client';
 import pug, { compileTemplate } from 'pug';
-import { config } from '../config';
-import { readYaml, scanForFiles } from '../fileUtils';
+import { config } from '../../config';
+import { readYaml, scanForFiles } from '../../fileUtils';
 import path from 'path';
-import { platformPrisma as prisma } from '../prisma';
+import { platformPrisma as prisma } from '../../prisma';
 import { SendGridProvider } from './email';
 import { DateTime } from 'luxon';
-import { cron } from '../scheduler';
-import { NotificationProvider } from '../types';
+import { cron } from '../../scheduler';
+import { NotificationProvider } from '../../types';
 
 const subjects = readYaml(`${config.app.templateRoot}/subjects.yaml`);
 

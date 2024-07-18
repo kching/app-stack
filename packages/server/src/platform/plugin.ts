@@ -42,7 +42,9 @@ type PluginStatus = 'created' | 'starting' | 'started' | 'stopping' | 'stopped';
 const allPlugins: { [pluginId: string]: Plugin } = {};
 
 export type Service = {
-  id: string;
+  get id(): string;
+  set id(value: string);
+  setId: (id: string) => void;
   logger: Logger;
   onStart: typeof Plugin.prototype.onStart;
   onStop: typeof Plugin.prototype.onStop;
@@ -75,8 +77,13 @@ export const initialise = async (extensionLocation: string, options: { [key: str
   return Promise.allSettled(
     pluginFiles.map(async (pluginPath) => {
       const extension = pluginPath.lastIndexOf('.');
-      const id = pluginPath.slice(extensionLocation.length - 1, extension > -1 ? extension : pluginPath.length - 1);
-      const importPath = path.relative(__dirname, pluginPath);
+      const id =
+        (options.idPrefix ?? '') +
+        pluginPath.slice(extensionLocation.length - 1, extension > -1 ? extension : pluginPath.length - 1);
+      let importPath = path.relative(__dirname, pluginPath);
+      if (!importPath.startsWith('./') && !importPath.startsWith('../')) {
+        importPath = './' + importPath;
+      }
       try {
         const module = await import(importPath);
         if (typeof module.init === 'function') {
@@ -100,6 +107,9 @@ const scheduleTask = (schedule: number | string, task: () => void): Promise<void
 
 const createContext = (plugin: Plugin): Service => ({
   id: plugin.id,
+  setId: (value: string) => {
+    plugin.id = value;
+  },
   logger: getLogger(plugin.id),
   onStart: Plugin.prototype.onStart.bind(plugin),
   onStop: Plugin.prototype.onStop.bind(plugin),
@@ -108,14 +118,36 @@ const createContext = (plugin: Plugin): Service => ({
   scheduleTask: scheduleTask,
 });
 
+export class PluginInitialisationError extends Error {
+  private readonly _plugin: string;
+  private readonly _status: string;
+  private readonly _dependencyChain: string[];
+
+  constructor(plugin: string, status: string, dependencyChain: string[]) {
+    super();
+    this._plugin = plugin;
+    this._status = status;
+    this._dependencyChain = dependencyChain;
+  }
+  get plugin() {
+    return this._plugin;
+  }
+  get status() {
+    return this._status;
+  }
+  get dependencyChain() {
+    return this._dependencyChain;
+  }
+}
+
 export class Plugin {
-  private readonly _id;
   private readonly endpoints: EndpointRegistration[] = [];
   private readonly webSocketEndpoints: WebSocketEndpointRegistration[] = [];
   private readonly options: { [key: string]: any } = {};
   private readonly executionContext: Service;
   private readonly init: Promise<string>;
 
+  private _id;
   private dependsOn: string[] = [];
   private _status: PluginStatus = 'created';
   private router?: Router;
@@ -135,17 +167,24 @@ export class Plugin {
         if (dependsOn) {
           this.dependsOn = dependsOn ?? [];
         }
-        allPlugins[id] = this;
+        if (allPlugins[this._id] != null) {
+          logger.error(`Plugin ID conflict: Multiple plugins have the same ID ${this._id}`);
+        }
+        allPlugins[this._id] = this;
         return 'ready';
       })
       .catch((error) => {
-        logger.warn(`Failed to load plugin ${id}`, error);
+        logger.warn(`Failed to load plugin ${this._id}`, error);
         return 'failed';
       });
   }
 
   get id(): string {
     return this._id;
+  }
+
+  set id(id: string) {
+    this._id = id;
   }
 
   get status(): PluginStatus {
@@ -162,19 +201,23 @@ export class Plugin {
     return this;
   }
 
-  async start() {
+  async start(dependencyChain: string[] = []) {
     const init = await this.init;
     if (init === 'ready' && (this.status === 'created' || this.status === 'stopped')) {
       this._status = 'starting';
+      dependencyChain.push(this.id);
       getLogger(this.id).debug('Starting...');
+
+      let success = true;
+
       await Promise.all(
         this.dependsOn.map((dependency) => {
           const dependPlugin = allPlugins[dependency];
           if (dependPlugin) {
-            return dependPlugin.start();
+            return dependPlugin.start(dependencyChain);
           } else {
             getLogger(this.id).error(`Failed to start plugin. Dependency ${dependency} not found.`);
-            throw new Error('Dependency ${dependency} not found.');
+            throw new Error(`Dependency for plugin ${this.id} not found: ${dependency} `);
           }
         })
       );
@@ -192,6 +235,8 @@ export class Plugin {
         await this.startCallback(this.executionContext, this.options);
       }
       this._status = 'started';
+    } else if (this.status === 'starting') {
+      throw new PluginInitialisationError(this.id, this.status, dependencyChain);
     }
   }
 
@@ -222,7 +267,7 @@ export class Plugin {
     }
   }
 
-  useEndpoint(method: HttpMethod, path: string, ...handlers: RequestHandler[]) {
+  useEndpoint(method: HttpMethod, path: string, ...handlers: RequestHandler[]): EndpointRegistration {
     const reg = new EndpointRegistration(method, path, handlers);
     this.endpoints.push(reg);
     if (this.router && this._status === 'started') {

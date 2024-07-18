@@ -1,14 +1,14 @@
 import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
-import { config } from '../config';
-import { platformPrisma as prisma } from '../prisma';
-import { cron } from '../scheduler';
-import { Service } from '../plugin';
+import { config } from '../../config';
+import { platformPrisma as prisma } from '../../prisma';
+import { cron } from '../../scheduler';
+import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
 import { notify } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
-import { createUser, findUserByUid } from './userGroups';
+import { findUserByUid } from './userGroups';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -114,6 +114,7 @@ const createRefreshToken = (user: User, secret: string) => {
 };
 
 export async function init(this: Service) {
+  this.setId('platform/auth');
   this.useEndpoint('post', '/login', async (req, res) => {
     const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
     let refreshToken = req.cookies['refresh-token'];
@@ -252,5 +253,5 @@ export async function init(this: Service) {
         .send();
     }
   });
-  return ['userGroups'];
+  return ['platform/userGroups'];
 }

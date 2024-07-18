@@ -1,8 +1,8 @@
-import { platformPrisma as prisma } from '../prisma';
-import { getLogger } from '../logger';
-import { config } from '../config';
+import { platformPrisma as prisma } from '../../prisma';
+import { getLogger } from '../../logger';
+import { config } from '../../config';
 import bcrypt from 'bcryptjs';
-import { Service } from '../plugin';
+import { Service } from '../../plugin';
 import { findAuthByScheme } from './auth';
 
 export const findUserByUid = async (uid: string, enabledUsersOnly = true) => {
@@ -147,6 +147,7 @@ const createAnonymousUserIfMissing = async (anonymousUID: string, createdByUid: 
 };
 
 export async function init(this: Service) {
+  this.setId('platform/userGroups');
   this.onStart(async () => {
     const rootUser = await createRootUserIfMissing(config.auth.rootUser);
     await createAnonymousUserIfMissing(config.auth.anonymousUser, rootUser.uid);

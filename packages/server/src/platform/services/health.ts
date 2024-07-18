@@ -1,5 +1,5 @@
-import { Service } from '../platform/plugin';
-import pkg from '../../package.json';
+import { Service } from '../plugin';
+import pkg from '../../../package.json';
 
 const getVersion = () => {
   return pkg.version;

@@ -1,5 +1,5 @@
-import { findUserByUid } from './auth';
-import { platformPrisma as prisma } from '../prisma';
+import { findUserByUid } from './userGroups';
+import { platformPrisma as prisma } from '../../prisma';
 import { jest } from '@jest/globals';
 
 jest.mock('../notifications', () => ({

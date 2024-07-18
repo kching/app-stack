@@ -1,18 +1,15 @@
 import fs, { Dirent } from 'fs';
 import path from 'path';
-import {parse} from "yaml";
+import { parse } from 'yaml';
 
 const isTestFile = (entry: Dirent) => {
-  return (
-    (entry.isFile() && entry.name.endsWith('.test.ts')) ||
-    (entry.isDirectory() && entry.name === '__tests__')
-  );
+  return (entry.isFile() && entry.name.endsWith('.test.ts')) || (entry.isDirectory() && entry.name === '__tests__');
 };
 
 export const scanForFiles = async (
   directory: string,
-  filter: (file: Dirent) => boolean = () => true,
-  result: Promise<string[]> = Promise.resolve([]),
+  filter: (file: Dirent) => boolean = (file) => !isTestFile(file),
+  result: Promise<string[]> = Promise.resolve([])
 ): Promise<string[]> => {
   let entries: Dirent[] = (
     await fs.promises.readdir(directory, {
