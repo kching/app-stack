@@ -39,6 +39,8 @@ type WebSocketEndpointRegistration = {
 
 type PluginStatus = 'created' | 'starting' | 'started' | 'stopping' | 'stopped';
 
+const allPlugins: { [pluginId: string]: Plugin } = {};
+
 export type Service = {
   id: string;
   logger: Logger;
@@ -49,7 +51,7 @@ export type Service = {
   scheduleTask: (schedule: number | string, task: () => void) => void;
 };
 
-type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promise<void> | void;
+type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promise<void> | Promise<string[]> | void;
 
 const logger = getLogger();
 
@@ -114,6 +116,7 @@ export class Plugin {
   private readonly executionContext: Service;
   private readonly init: Promise<string>;
 
+  private dependsOn: string[] = [];
   private _status: PluginStatus = 'created';
   private router?: Router;
   private wsRouter?: WebSocketRouter;
@@ -125,10 +128,16 @@ export class Plugin {
     this.options = options;
 
     this.executionContext = createContext(this);
-    this.init = new Promise((resolve, reject) => {
+    this.init = new Promise<string[] | void>((resolve, reject) => {
       resolve(func.call(this.executionContext, options));
     })
-      .then(() => 'ready')
+      .then((dependsOn) => {
+        if (dependsOn) {
+          this.dependsOn = dependsOn ?? [];
+        }
+        allPlugins[id] = this;
+        return 'ready';
+      })
       .catch((error) => {
         logger.warn(`Failed to load plugin ${id}`, error);
         return 'failed';
@@ -158,6 +167,17 @@ export class Plugin {
     if (init === 'ready' && (this.status === 'created' || this.status === 'stopped')) {
       this._status = 'starting';
       getLogger(this.id).debug('Starting...');
+      await Promise.all(
+        this.dependsOn.map((dependency) => {
+          const dependPlugin = allPlugins[dependency];
+          if (dependPlugin) {
+            return dependPlugin.start();
+          } else {
+            getLogger(this.id).error(`Failed to start plugin. Dependency ${dependency} not found.`);
+            throw new Error('Dependency ${dependency} not found.');
+          }
+        })
+      );
       this.endpoints.forEach((reg) => {
         if (this.router != null) {
           registerEndpoint(this.router, reg);

@@ -8,6 +8,7 @@ import { initialise, Plugin } from './plugin';
 import { flatten } from 'lodash';
 import { getLogger } from './logger';
 import passport from 'passport';
+import { init as userGroupService } from './userManagement/userGroups';
 import { init as authService, jwt } from './userManagement/auth';
 import { init as healthService } from './health';
 
@@ -42,7 +43,11 @@ class Platform {
     return this;
   }
 
-  private readonly corePlugins = [new Plugin('health', healthService), new Plugin('auth', authService)];
+  private readonly corePlugins = [
+    new Plugin('health', healthService),
+    new Plugin('auth', authService),
+    new Plugin('userGroups', userGroupService),
+  ];
 
   async start(port?: number) {
     try {

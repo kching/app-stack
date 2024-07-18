@@ -8,6 +8,7 @@ import { User } from '@prisma/client';
 import { notify } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
+import { createUser, findUserByUid } from './userGroups';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -76,124 +77,43 @@ export const jwt = () => {
 //   });
 // }
 
-export const findUserByUid = async (uid: string, enabledUsersOnly = true) => {
-  if (enabledUsersOnly) {
-    return prisma.user.findUnique({
-      where: { uid, enabled: true },
-    });
-  } else {
-    return prisma.user.findUnique({
-      where: { uid },
-    });
-  }
-};
-
-export const createUser = async (createdByUid: string, scheme: string, username: string, secret: string) => {
-  const exists = prisma.authScheme.findFirst({
+export const findAuthByScheme = async (scheme: string, username: string) => {
+  return prisma.authScheme.findUnique({
+    include: { user: true },
     where: {
-      scheme,
-      username,
+      scheme_username: {
+        scheme,
+        username,
+      },
     },
   });
-  if (!exists) {
-    return prisma.user.create({
-      data: {
-        authSchemes: {
-          create: {
-            scheme,
-            username,
-            secret,
-          },
-        },
-        createdByUid,
-      },
-    });
-  } else {
-    throw new Error('User already exists');
-  }
 };
 
-export async function init(this: Service) {
-  const createRootUserIfMissing = async (rootUID: string) => {
-    return prisma.user.upsert({
-      where: {
-        uid: rootUID,
-      },
-      update: {},
-      create: {
-        uid: rootUID,
-        createdByUid: rootUID,
-      },
-    });
-  };
-  const createAnonymousUserIfMissing = async (anonymousUID: string, createdByUid: string) => {
-    return prisma.user.upsert({
-      where: {
-        uid: anonymousUID,
-      },
-      update: {},
-      create: {
-        uid: anonymousUID,
-        createdByUid,
-      },
-    });
-  };
-  const findAuthByScheme = async (scheme: string, username: string) => {
-    return prisma.authScheme.findUnique({
-      include: { user: true },
-      where: {
-        scheme_username: {
-          scheme,
-          username,
-        },
-      },
-    });
-  };
-  const createAccessToken = (user: User, secret: string) => {
-    return Jwt.sign(
-      {
-        displayName: user.displayName,
-        permissions: [],
-      },
-      secret,
-      {
-        subject: user.uid,
-        issuer: config.auth.issuer,
-        audience: config.app.domain,
-        expiresIn: config.auth.tokenMaxAgeSeconds,
-      }
-    );
-  };
-  const createRefreshToken = (user: User, secret: string) => {
-    return Jwt.sign({}, secret, {
+const createAccessToken = (user: User, secret: string) => {
+  return Jwt.sign(
+    {
+      displayName: user.displayName,
+      permissions: [],
+    },
+    secret,
+    {
       subject: user.uid,
       issuer: config.auth.issuer,
       audience: config.app.domain,
-      expiresIn: config.auth.sessionMaxAgeSeconds,
-    });
-  };
-
-  const rootUser = await createRootUserIfMissing(config.auth.rootUser);
-  await createAnonymousUserIfMissing(config.auth.anonymousUser, rootUser.uid);
-
-  this.onStart(async () => {
-    const defaultUsers = config.auth.defaultUsers ?? [];
-    if (defaultUsers) {
-      return Promise.allSettled(
-        defaultUsers.map(async (user: string) => {
-          const [username, secret] = user.split('/');
-          if (username.trim().length > 0 && secret.trim().length > 0) {
-            const user = await findAuthByScheme('local', username);
-            if (user == null) {
-              const hashedPassword = await bcrypt.hash(secret, 12);
-              await createUser(rootUser.uid, 'local', username, hashedPassword);
-            }
-          }
-        })
-      );
+      expiresIn: config.auth.tokenMaxAgeSeconds,
     }
+  );
+};
+const createRefreshToken = (user: User, secret: string) => {
+  return Jwt.sign({}, secret, {
+    subject: user.uid,
+    issuer: config.auth.issuer,
+    audience: config.app.domain,
+    expiresIn: config.auth.sessionMaxAgeSeconds,
   });
+};
 
+export async function init(this: Service) {
   this.useEndpoint('post', '/login', async (req, res) => {
     const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
     let refreshToken = req.cookies['refresh-token'];
@@ -247,7 +167,6 @@ export async function init(this: Service) {
       res.status(401);
     }
   }).withAuthentication(null);
-
   this.useEndpoint('post', '/logout', async (req, res) => {
     const accessToken = req.header('Authorization') || req.cookies['access-token'];
     const refreshToken = req.cookies['refresh-token'];
@@ -267,7 +186,6 @@ export async function init(this: Service) {
     }
     res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
   });
-
   this.useEndpoint('post', '/password', async (req, res) => {
     const user = req.user as User;
     const { oldPassword, newPassword } = req.body as {
@@ -308,7 +226,6 @@ export async function init(this: Service) {
       res.status(500).json(error);
     }
   });
-
   this.useEndpoint('post', '/forgotPassword', async (req, res) => {
     const { username } = req.body;
     if (!username) {
@@ -335,4 +252,5 @@ export async function init(this: Service) {
         .send();
     }
   });
+  return ['userGroups'];
 }
