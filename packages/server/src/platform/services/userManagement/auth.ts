@@ -148,15 +148,16 @@ export async function init(this: Service) {
         refreshToken = createRefreshToken(user, JWT_SECRET);
       }
       const accessToken = createAccessToken(user, JWT_SECRET);
+
       res
         .status(200)
         .cookie('access-token', accessToken, {
-          maxAge: config.auth.tokenMaxAgeSeconds * 1000,
+          maxAge: config.auth.tokenMaxAgeSeconds * 1000000,
           httpOnly: true,
           secure: true,
         })
         .cookie('refresh-token', refreshToken, {
-          maxAge: config.auth.sessionMaxAgeSeconds * 1000,
+          maxAge: config.auth.sessionMaxAgeSeconds * 1000000,
           httpOnly: true,
           secure: true,
         })
@@ -168,6 +169,7 @@ export async function init(this: Service) {
       res.status(401);
     }
   }).withAuthentication(null);
+
   this.useEndpoint('post', '/logout', async (req, res) => {
     const accessToken = req.header('Authorization') || req.cookies['access-token'];
     const refreshToken = req.cookies['refresh-token'];

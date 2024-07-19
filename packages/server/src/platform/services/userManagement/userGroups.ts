@@ -148,6 +148,15 @@ const createAnonymousUserIfMissing = async (anonymousUID: string, createdByUid: 
 
 export async function init(this: Service) {
   this.setId('platform/userGroups');
+  this.useEndpoint('post', '/user', async (req, res) => {
+    const user = req.user as { uid: string; enabled: boolean };
+    if (user && user.enabled) {
+      const { username, secret, emailAddress } = req.body;
+      await createUser(user.uid, username, secret, emailAddress);
+    }
+    res.status(200).json({});
+  });
+
   this.onStart(async () => {
     const rootUser = await createRootUserIfMissing(config.auth.rootUser);
     await createAnonymousUserIfMissing(config.auth.anonymousUser, rootUser.uid);

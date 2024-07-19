@@ -208,12 +208,16 @@ export class Plugin {
       dependencyChain.push(this.id);
       getLogger(this.id).debug('Starting...');
 
-      let success = true;
-
       await Promise.all(
         this.dependsOn.map((dependency) => {
           const dependPlugin = allPlugins[dependency];
           if (dependPlugin) {
+            if (this.router) {
+              dependPlugin.withRouter(this.router);
+            }
+            if (this.wsRouter) {
+              dependPlugin.withWebSocketRouter(this.wsRouter);
+            }
             return dependPlugin.start(dependencyChain);
           } else {
             getLogger(this.id).error(`Failed to start plugin. Dependency ${dependency} not found.`);
