@@ -54,7 +54,7 @@ model UserGroup {
 model Permission {
   id        Int    @id @default(autoincrement())
   uid       String @unique @default(cuid())
-  principal String // either users/<cuid> or groups/<cuid>
+  principal String // either user:<cuid> or group:<cuid>
   resource  String // <resourceType>/<cuid> | *
   flags     Int // bitmast of execute|delete|update|create|read
 
@@ -108,4 +108,16 @@ model MessageOutBox {
   lastSentAt   DateTime?
   status       String    @default("pending")
   errorCount   Int       @default(0)
+}
+
+model Preference {
+  id        Int    @id @default(autoincrement())
+  uid       String @unique @default(cuid())
+  ownerUid  String // user:<uid> or group:<uid>
+  namespace String
+  attribute String
+  type      String // 'string' | 'number' | 'boolean' | 'object'
+  value     String
+
+  @@unique([ownerUid, namespace, attribute])
 }
