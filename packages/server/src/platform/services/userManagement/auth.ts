@@ -189,6 +189,7 @@ export async function init(this: Service) {
     }
     res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
   });
+
   this.useEndpoint('post', '/password', async (req, res) => {
     const user = req.user as User;
     const { oldPassword, newPassword } = req.body as {
@@ -229,6 +230,7 @@ export async function init(this: Service) {
       res.status(500).json(error);
     }
   });
+
   this.useEndpoint('post', '/forgotPassword', async (req, res) => {
     const { username } = req.body;
     if (!username) {

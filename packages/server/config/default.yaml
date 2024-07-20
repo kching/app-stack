@@ -21,5 +21,6 @@ auth:
   sessionMaxAgeSeconds: 86400
   rootUser: 'root'
   anonymousUser: 'anonymous'
+  adminGroupUid: 'admin'
   defaultUsers:
     - 'kai.y.ching@gmail.com/Welcome123!'

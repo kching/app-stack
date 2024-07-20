@@ -40,12 +40,13 @@ model Group {
 
 model UserGroup {
   id           Int      @id @default(autoincrement())
+  uid          String   @unique @default(cuid())
   userId       Int
   groupId      Int
   createdByUId String
   createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id])
-  group        Group    @relation(fields: [groupId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([userId, groupId])
 }
@@ -61,7 +62,7 @@ model Permission {
 }
 
 model Contact {
-  id       Int     @id
+  id       Int     @id @default(autoincrement())
   uid      String  @unique @default(cuid())
   userId   Int
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
