@@ -91,19 +91,34 @@ export const hasPermission = async (principal: string, resource: string, flags: 
   }
 
   const [resourceType, resourcePath] = resource.split('/');
-  const directPermission = await prisma.permission.findUnique({
-    where: {
-      searchBy: { principal, resource },
-    },
-  });
   const wildcardPermission = await prisma.permission.findUnique({
     where: {
       searchBy: { principal, resource: `${resourceType}/*` },
     },
   });
-  const principalPermission =
-    (directPermission ? directPermission.flags : 0) | (wildcardPermission ? wildcardPermission.flags : 0);
-  return (flags & principalPermission) > 0;
+
+  if (resourcePath.indexOf('=') > -1) {
+    const [attribute, value] = resourcePath.split('=');
+    const directPermission = await prisma.permission.findFirst({
+      where: {
+        principal,
+        resource,
+        [attribute]: value,
+      },
+    });
+    const principalPermission =
+      (directPermission ? directPermission.flags : 0) | (wildcardPermission ? wildcardPermission.flags : 0);
+    return (flags & principalPermission) > 0;
+  } else {
+    const directPermission = await prisma.permission.findUnique({
+      where: {
+        searchBy: { principal, resource },
+      },
+    });
+    const principalPermission =
+      (directPermission ? directPermission.flags : 0) | (wildcardPermission ? wildcardPermission.flags : 0);
+    return (flags & principalPermission) > 0;
+  }
 };
 
 export async function init(this: Service) {
