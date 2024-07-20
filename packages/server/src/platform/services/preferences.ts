@@ -28,7 +28,7 @@ export const getPreferenceValue = async (
   });
 
   if (pref) {
-    const { attribute, type, value } = pref;
+    const { type, value } = pref;
     switch (type) {
       case 'number':
         return Number.parseFloat(value);
@@ -54,7 +54,8 @@ export const getPreferences = async (callerId: string, ownerUid: string, namespa
   });
 };
 
-export const updatePreference = async (ownerUid: string, { action, preference }: PrefsUpdate) => {
+export const updatePreference = async (callerId: string, ownerUid: string, { action, preference }: PrefsUpdate) => {
+  // TODO: check for permissions
   const { namespace, attribute, value } = preference;
   if (action === 'UPDATE') {
     let strValue;
@@ -122,9 +123,10 @@ export async function init(this: Service) {
     const ownerUid = `user:${uid}`;
     if (Array.isArray(req.body as PrefsUpdate[])) {
       req.body.map((prefsUpdate: PrefsUpdate) => {
-        updatePreference(ownerUid, prefsUpdate);
+        updatePreference(callUid, ownerUid, prefsUpdate);
       });
     }
+    res.status(200).end();
   });
   this.useEndpoint('get', '/groups/:uid/prefs', async (req, res) => {
     const callerUid = (req.user as { uid: string }).uid;
@@ -140,8 +142,9 @@ export async function init(this: Service) {
     const ownerUid = `group:${uid}`;
     if (Array.isArray(req.body as PrefsUpdate[])) {
       req.body.map((prefsUpdate: PrefsUpdate) => {
-        updatePreference(ownerUid, prefsUpdate);
+        updatePreference(callUid, ownerUid, prefsUpdate);
       });
     }
+    res.status(200).end();
   });
 }
