@@ -56,7 +56,7 @@ model Permission {
   uid       String @unique @default(cuid())
   principal String // either users/<cuid> or groups/<cuid>
   resource  String // <resourceType>/<cuid> | *
-  values    Int // bitmast of execute|delete|update|create|read
+  flags     Int // bitmast of execute|delete|update|create|read
 
   @@unique([principal, resource], name: "searchBy")
 }
