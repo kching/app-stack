@@ -124,7 +124,7 @@ export async function init(this: Service) {
         audience: config.app.domain,
         clockTolerance: 6000,
       });
-      user = await findUserByUid(payload.sub as string);
+      user = await findUserByUid(config.auth.rootUser, payload.sub as string);
     } else if (req.body) {
       const { username, password } = req.body;
       if (username && username.trim().length > 0 && password && password.trim().length > 0) {

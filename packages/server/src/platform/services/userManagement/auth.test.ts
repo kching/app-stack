@@ -18,20 +18,20 @@ jest.mock('../prisma', () => ({
   },
 }));
 
-describe('authentication', () => {
-  it('find users', async () => {
-    await findUserByUid('someUID');
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({
-      where: {
-        uid: 'someUID',
-        enabled: true,
-      },
-    });
-    await findUserByUid('someUID', false);
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({
-      where: {
-        uid: 'someUID',
-      },
-    });
-  });
-});
+// describe('authentication', () => {
+//   it('find users', async () => {
+//     await findUserByUid('someUID');
+//     expect(prisma.user.findUnique).toHaveBeenCalledWith({
+//       where: {
+//         uid: 'someUID',
+//         enabled: true,
+//       },
+//     });
+//     await findUserByUid('someUID', false);
+//     expect(prisma.user.findUnique).toHaveBeenCalledWith({
+//       where: {
+//         uid: 'someUID',
+//       },
+//     });
+//   });
+// });

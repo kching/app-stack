@@ -63,9 +63,10 @@ model Permission {
 
 model Contact {
   id       Int     @id @default(autoincrement())
-  uid      String  @unique @default(cuid())
   userId   Int
   user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uid      String  @unique @default(cuid())
+  userUid  String
   channel  String
   address  String
   verified Boolean @default(false)

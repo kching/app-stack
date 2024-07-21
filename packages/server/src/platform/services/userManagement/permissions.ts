@@ -1,6 +1,7 @@
 import { platformPrisma as prisma } from '../../prisma';
 import { Service } from '../../plugin';
 import { config } from '../../config';
+import { AccessDeniedError } from '../../errors';
 
 type Action = 'CREATE' | 'DELETE';
 
@@ -20,7 +21,7 @@ export enum Flags {
 }
 
 export const assignPermission = async (callerUid: string, principal: string, flags: number, resource: string) => {
-  const allowed = await hasPermission(callerUid, 'permission/*', Flags.CREATE | Flags.UPDATE | Flags.DELETE);
+  const allowed = await hasPermission(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
   if (allowed) {
     const permission = await prisma.permission.findUnique({
       select: {
@@ -49,11 +50,17 @@ export const assignPermission = async (callerUid: string, principal: string, fla
         flags: flags,
       },
     });
+  } else {
+    throw new AccessDeniedError(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
   }
 };
 
 export const clearPermission = async (callerUid: string, principal: string, flags: number, resource: string) => {
-  const allowed = await hasPermission(callerUid, 'permission/*', Flags.CREATE | Flags.UPDATE | Flags.DELETE);
+  const allowed = await hasPermission(
+    callerUid,
+    `permission/resource=${resource}`,
+    Flags.CREATE | Flags.UPDATE | Flags.DELETE
+  );
   if (allowed) {
     const permission = await prisma.permission.findUnique({
       select: {
@@ -82,6 +89,8 @@ export const clearPermission = async (callerUid: string, principal: string, flag
         });
       }
     }
+  } else {
+    throw new AccessDeniedError(callerUid, resource, Flags.DELETE);
   }
 };
 
