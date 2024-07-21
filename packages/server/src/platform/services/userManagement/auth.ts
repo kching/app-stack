@@ -9,6 +9,7 @@ import { notify } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { findUserByUid } from './userGroups';
+import { publish } from '../../events';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -131,6 +132,9 @@ export async function init(this: Service) {
         const auth = await findAuthByScheme('local', username);
         if (auth && bcrypt.compareSync(password, auth.secret)) {
           user = auth.user.enabled ? auth.user : null;
+          if (user) {
+            publish('auth.loggedIn', { userUid: user.uid });
+          }
         }
       } else {
         res.status(400).send({
@@ -171,6 +175,7 @@ export async function init(this: Service) {
   }).withAuthentication(null);
 
   this.useEndpoint('post', '/logout', async (req, res) => {
+    const user = req.user as { uid: string };
     const accessToken = req.header('Authorization') || req.cookies['access-token'];
     const refreshToken = req.cookies['refresh-token'];
     if (accessToken) {
@@ -188,6 +193,7 @@ export async function init(this: Service) {
       });
     }
     res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
+    publish('auth.loggedOut', { userUid: user.uid });
   });
 
   this.useEndpoint('post', '/password', async (req, res) => {

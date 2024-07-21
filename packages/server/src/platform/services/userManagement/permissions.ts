@@ -2,6 +2,7 @@ import { platformPrisma as prisma } from '../../prisma';
 import { Service } from '../../plugin';
 import { config } from '../../config';
 import { AccessDeniedError } from '../../errors';
+import { publish } from '../../events';
 
 type Action = 'CREATE' | 'DELETE';
 
@@ -23,10 +24,7 @@ export enum Flags {
 export const assignPermission = async (callerUid: string, principal: string, flags: number, resource: string) => {
   const allowed = await hasPermission(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
   if (allowed) {
-    const permission = await prisma.permission.findUnique({
-      select: {
-        flags: true,
-      },
+    let permission = await prisma.permission.findUnique({
       where: {
         searchBy: { principal, resource },
       },
@@ -34,7 +32,7 @@ export const assignPermission = async (callerUid: string, principal: string, fla
     if (permission) {
       flags &= permission.flags;
     }
-    return prisma.permission.upsert({
+    permission = await prisma.permission.upsert({
       where: {
         searchBy: {
           principal: principal,
@@ -50,6 +48,8 @@ export const assignPermission = async (callerUid: string, principal: string, fla
         flags: flags,
       },
     });
+    publish('resource.permission', { status: 'UPDATED', resourceId: permission.uid });
+    return permission;
   } else {
     throw new AccessDeniedError(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
   }
@@ -62,10 +62,7 @@ export const clearPermission = async (callerUid: string, principal: string, flag
     Flags.CREATE | Flags.UPDATE | Flags.DELETE
   );
   if (allowed) {
-    const permission = await prisma.permission.findUnique({
-      select: {
-        flags: true,
-      },
+    let permission = await prisma.permission.findUnique({
       where: {
         searchBy: { principal, resource },
       },
@@ -73,13 +70,14 @@ export const clearPermission = async (callerUid: string, principal: string, flag
     if (permission) {
       const newflags = permission.flags & ~flags;
       if (newflags === 0) {
-        await prisma.permission.delete({
+        permission = await prisma.permission.delete({
           where: {
             searchBy: { principal, resource },
           },
         });
+        publish('resource.permission', { status: 'DELETED', resourceId: permission.uid });
       } else {
-        await prisma.permission.update({
+        permission = await prisma.permission.update({
           where: {
             searchBy: { principal, resource },
           },
@@ -87,7 +85,9 @@ export const clearPermission = async (callerUid: string, principal: string, flag
             flags: flags,
           },
         });
+        publish('resource.permission', { status: 'UPDATED', resourceId: permission.uid });
       }
+      return permission;
     }
   } else {
     throw new AccessDeniedError(callerUid, resource, Flags.DELETE);

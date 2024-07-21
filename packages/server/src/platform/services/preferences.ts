@@ -1,5 +1,7 @@
 import { Service } from '../plugin';
 import { platformPrisma as prisma } from '../prisma';
+import { Flags, hasPermission } from './userManagement/permissions';
+import { publish } from '../events';
 
 type Preference = {
   namespace: string;
@@ -56,55 +58,64 @@ export const getPreferences = async (callerId: string, ownerUid: string, namespa
 
 export const updatePreference = async (callerId: string, ownerUid: string, { action, preference }: PrefsUpdate) => {
   // TODO: check for permissions
-  const { namespace, attribute, value } = preference;
-  if (action === 'UPDATE') {
-    let strValue;
-    switch (typeof value) {
-      case 'number':
-        strValue = Number(value).toString();
-        break;
-      case 'boolean':
-        strValue = Boolean(value).toString();
-        break;
-      case 'object':
-        strValue = JSON.stringify(value);
-        break;
-      default:
-        strValue = String(value);
+  const allowed = await hasPermission(
+    callerId,
+    `preference/ownerUid=${ownerUid}`,
+    Flags.CREATE | Flags.UPDATE | Flags.DELETE
+  );
+  if (allowed) {
+    const { namespace, attribute, value } = preference;
+    if (action === 'UPDATE') {
+      let strValue;
+      switch (typeof value) {
+        case 'number':
+          strValue = Number(value).toString();
+          break;
+        case 'boolean':
+          strValue = Boolean(value).toString();
+          break;
+        case 'object':
+          strValue = JSON.stringify(value);
+          break;
+        default:
+          strValue = String(value);
+      }
+      return prisma.preference.upsert({
+        where: {
+          ownerUid_namespace_attribute: {
+            ownerUid,
+            namespace,
+            attribute,
+          },
+        },
+        create: {
+          ownerUid,
+          namespace,
+          attribute,
+          type: typeof value,
+          value: strValue,
+        },
+        update: {
+          ownerUid,
+          namespace,
+          attribute,
+          type: typeof value,
+          value: strValue,
+        },
+      });
+    } else if (action === 'DELETE') {
+      const preference = await prisma.preference.delete({
+        where: {
+          ownerUid_namespace_attribute: {
+            ownerUid,
+            namespace,
+            attribute,
+          },
+        },
+      });
+      publish('resource.preference', { status: 'UPDATED', resourceId: preference.uid });
+      return preference;
     }
-    return prisma.preference.upsert({
-      where: {
-        ownerUid_namespace_attribute: {
-          ownerUid,
-          namespace,
-          attribute,
-        },
-      },
-      create: {
-        ownerUid,
-        namespace,
-        attribute,
-        type: typeof value,
-        value: strValue,
-      },
-      update: {
-        ownerUid,
-        namespace,
-        attribute,
-        type: typeof value,
-        value: strValue,
-      },
-    });
-  } else if (action === 'DELETE') {
-    return prisma.preference.delete({
-      where: {
-        ownerUid_namespace_attribute: {
-          ownerUid,
-          namespace,
-          attribute,
-        },
-      },
-    });
   }
 };
 

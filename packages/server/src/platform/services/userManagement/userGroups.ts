@@ -7,6 +7,7 @@ import { findAuthByScheme } from './auth';
 import { assignPermission, Flags, hasPermission } from './permissions';
 import { AccessDeniedError } from '../../errors';
 import * as runtime from '../../../../prisma/generated/platformClient/runtime/library';
+import { publish } from '../../events';
 
 type Action = 'CREATE' | 'UPDATE' | 'DELETE';
 type UserProfileUpdate = {
@@ -103,6 +104,7 @@ export const createUser = async (createdByUid: string, scheme: string, username:
           Flags.CREATE | Flags.READ | Flags.UPDATE,
           `preference/ownerUid=user:${user.uid}`
         );
+        publish('resource.user', { status: 'CREATED', resource: user.uid });
         return user;
       } else {
         return exists.user;
@@ -130,11 +132,12 @@ export const updateUser = async (
           enabled,
         },
       });
+      publish('resource.user', { status: 'UPDATED', resourceId: user.uid });
       if (user && Array.isArray(contacts)) {
         await Promise.all(
           contacts.map(async ({ action, uid, channel, address }) => {
             if (action === 'CREATE') {
-              return tx.contact.create({
+              const contact = await tx.contact.create({
                 data: {
                   userId: user.id,
                   userUid: user.uid,
@@ -142,8 +145,10 @@ export const updateUser = async (
                   address,
                 },
               });
+              publish('resource.contact', { status: 'CREATED', resource: contact.uid });
+              return contact;
             } else if (action === 'UPDATE') {
-              return tx.contact.update({
+              const contact = await tx.contact.update({
                 where: {
                   uid,
                 },
@@ -152,12 +157,16 @@ export const updateUser = async (
                   address,
                 },
               });
+              publish('resource.contact', { status: 'UPDATED', resource: contact.uid });
+              return contact;
             } else if (action === 'DELETE') {
-              return tx.contact.delete({
+              const contact = await tx.contact.delete({
                 where: {
                   uid,
                 },
               });
+              publish('resource.contact', { status: 'DELETED', resource: contact.uid });
+              return contact;
             }
           })
         );
@@ -231,13 +240,14 @@ export const createUserGroup = async (
   const resourceId = 'group/*';
   const allowed = await hasPermission(callerUid, resourceId, Flags.CREATE);
   if (allowed) {
-    return tx.group.create({
+    const group = await tx.group.create({
       data: {
         label,
         description,
         createdByUid: callerUid,
       },
     });
+    publish('resource.group', { status: 'CREATED', resourceId: group.uid });
   } else {
     throw new AccessDeniedError(callerUid, resourceId, Flags.CREATE);
   }
@@ -267,6 +277,7 @@ export const updateUserGroup = async (
           description: description,
         },
       });
+      publish('resource.group', { status: 'UPDATED', resourceId: group.uid });
     }
     return group;
   } else {
@@ -282,9 +293,11 @@ export const deleteUserGroup = async (
   const resourceId = `group/${groupUid}`;
   const allowed = await hasPermission(callerUid, resourceId, Flags.DELETE);
   if (allowed) {
-    return tx.group.delete({
+    const group = await tx.group.delete({
       where: { uid: groupUid },
     });
+    publish('resource.group', { status: 'DELETED', resourceId: groupUid });
+    return group;
   } else {
     throw new AccessDeniedError(callerUid, resourceId, Flags.DELETE);
   }
@@ -358,6 +371,7 @@ export const updateGroupMembership = async (
             }
           })
       );
+      publish('resource.group', { status: 'UPDATED', resourceId: group.uid });
     });
   } else {
     throw new AccessDeniedError(callerUid, resourceId, Flags.DELETE);
