@@ -32,9 +32,11 @@ const startPlugins = async (roots: string[], options: { [key: string]: any } = {
     try {
       await plugin.withRouter(router).withWebSocketRouter(wsRouter).start();
     } catch (error) {
-      const pluginStartError = error as PluginInitialisationError;
-
-      getLogger().error(`Circular dependency for plugins detected: ${pluginStartError.dependencyChain.join(' -> ')}`);
+      if (error instanceof PluginInitialisationError) {
+        const pluginStartError = error as PluginInitialisationError;
+        getLogger().error(`Circular dependency for plugins detected: ${pluginStartError.dependencyChain.join(' -> ')}`);
+      }
+      console.error(error);
       process.exit(1);
     }
   }
@@ -68,7 +70,8 @@ class Platform {
     try {
       services = await startPlugins(this.serviceRoots, { idPrefix: 'platform/' });
     } catch (error) {
-      getLogger().error('Failed to initialize platform service', error);
+      getLogger().error('Failed to initialize platform service');
+      console.error(error);
       process.exit(1);
     }
 

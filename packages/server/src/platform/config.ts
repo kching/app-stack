@@ -31,7 +31,7 @@ export type Config = {
     sessionMaxAgeSeconds: number;
     defaultUsers: string[];
     rootUser: string;
-    adminGroup: string;
+    adminGroupUid: string;
     anonymousUser: string;
   };
   env: {

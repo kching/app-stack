@@ -95,7 +95,7 @@ export const clearPermission = async (callerUid: string, principal: string, flag
 };
 
 export const hasPermission = async (principal: string, resource: string, flags: number) => {
-  if (principal === `user:${config.auth.rootUser}`) {
+  if (principal === config.auth.rootUser) {
     return true;
   }
 
@@ -149,8 +149,8 @@ export async function init(this: Service) {
   });
 
   this.onStart(async () => {
-    if (config.auth.rootUser && config.auth.adminGroup) {
-      const principal = `group:${config.auth.adminGroup}`;
+    if (config.auth.rootUser && config.auth.adminGroupUid) {
+      const principal = `group:${config.auth.adminGroupUid}`;
       await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'user/*');
       await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'group/*');
       await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'permission/*');

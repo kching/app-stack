@@ -544,9 +544,9 @@ export async function init(this: Service) {
     const rootUser = await createRootUserIfMissing(config.auth.rootUser);
     await createAnonymousUserIfMissing(config.auth.anonymousUser, rootUser.uid);
     let adminGroup = await prisma.group.upsert({
-      where: { uid: config.auth.adminGroup },
+      where: { uid: config.auth.adminGroupUid },
       create: {
-        uid: config.auth.adminGroup,
+        uid: config.auth.adminGroupUid,
         label: 'admin',
         description: 'Default admin group',
         createdByUid: rootUser.uid,
