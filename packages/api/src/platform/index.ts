@@ -1,4 +1,4 @@
-import express, { json, static as staticResource } from 'express';
+import express, { Express, json, static as staticResource } from 'express';
 import { config } from './config';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -9,6 +9,7 @@ import { flatten } from 'lodash';
 import { getLogger } from './logger';
 import passport from 'passport';
 import { jwt } from './services/userManagement/auth';
+import { Server } from 'node:http';
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,10 +63,14 @@ class Platform {
     this._extensionRoots = extensions;
     return this;
   }
+  configure(func: (app: Express) => void) {
+    func(app);
+    return this;
+  }
 
   private readonly serviceRoots = ['./src/platform/services'];
 
-  async start(port?: number) {
+  async start(callBack?: (httpServer: Server) => Promise<void>, port?: number) {
     let services: Plugin[] = [];
     try {
       services = await startPlugins(this.serviceRoots, { idPrefix: 'platform/' });
@@ -107,6 +112,10 @@ class Platform {
     process.on('SIGINT', () => handleTermination('SIGINT'));
     process.on('SIGQUIT', () => handleTermination('SIGQUIT'));
     process.on('SIGTERM', () => handleTermination('SIGTERM'));
+
+    if (typeof callBack === 'function') {
+      await callBack(httpServer);
+    }
 
     return this;
   }
