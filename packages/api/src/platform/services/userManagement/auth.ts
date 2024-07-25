@@ -5,11 +5,12 @@ import { cron } from '../../scheduler';
 import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
-import { notify } from '../notifications';
+import { notify, notifyContact } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { findUserByUid } from './userGroups';
 import { publish } from '../../events';
+import { getLogger } from '../../logger';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -254,13 +255,20 @@ export async function init(this: Service) {
           secret: bcrypt.hashSync(newPassword, 12),
         },
       });
-      await notify(auth.user)
-        .withMessage('forgotPassword', {
+      const contact = await prisma.contact.findFirst({
+        where: {
+          userId: auth.user.id,
+          passwordRecovery: true,
+        },
+      });
+      if (contact) {
+        await notifyContact(contact.uid, 'forgotPassword', {
           username: auth.username,
           password: newPassword,
-        })
-        .overChannel('email')
-        .send();
+        });
+      } else {
+        getLogger('Auth').info(`New password for ${auth.username} is ${newPassword}`);
+      }
     }
   });
   return ['platform/userGroups'];

@@ -1,71 +1,39 @@
-import { User } from '@prisma/client';
-import pug, { compileTemplate } from 'pug';
 import { config } from '../../config';
-import { readYaml, scanForFiles } from '../../fileUtils';
-import path from 'path';
 import { platformPrisma as prisma } from '../../prisma';
-import { SendGridProvider } from './email';
 import { DateTime } from 'luxon';
 import { cron } from '../../scheduler';
 import { NotificationProvider } from '../../types';
 
-const subjects = readYaml(`${config.app.templateRoot}/subjects.yaml`);
-
-type Channel = {
-  contentTypes: string[];
+type ChannelRegistration = {
+  channel: string;
   provider: NotificationProvider;
-  templates: { [templateName: string]: compileTemplate };
 };
 
-const purgeOldData = async (cutOff: Date) => {
-  await prisma.messageOutBox.deleteMany({
-    where: {
-      sentAt: { lt: cutOff },
-    },
-  });
-};
-purgeOldData(DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate()).then(() => {
-  cron('0 0 0 * * *', async () => {
-    const cutOff = DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate();
-    await purgeOldData(cutOff);
-  });
-});
+class Notifications {
+  readonly allChannels: ChannelRegistration[] = [];
+  constructor() {}
 
-const loadTemplates = async (templateRoot: string, channelName: string) => {
-  const filePaths = await scanForFiles(`${templateRoot}/${channelName}`, (file) => file.name.endsWith('.pug'));
-  return filePaths.reduce(
-    (result, filePath) => {
-      const name = path.basename(filePath).substring(0, -4);
-      result[name] = pug.compileFile(filePath);
-      return result;
-    },
-    {} as { [name: string]: compileTemplate }
-  );
-};
-
-type Formatter = typeof format;
-const format = (templateName: string, channel: Channel, data: { [key: string]: any }, contentType = 'html') => {
-  const lookupName = templateName + '.' + contentType;
-  const template = channel.templates[lookupName];
-  if (template) {
-    return template(data);
+  /**
+   * Registers a Notification Provider to be responsible for formatting and sending of events for a particular channel.
+   * There can be multiple providers added for a single channel.
+   * @param channel
+   * @param provider
+   */
+  use(channel: string, provider: NotificationProvider) {
+    this.allChannels.push({ channel, provider });
   }
-  return null;
-};
+}
 
-const preSend = async (
-  templateName: string,
-  channelName: string,
-  data: { [key: string]: any },
-  address: string | string[]
-) => {
+const notifications = new Notifications();
+
+const beforeSend = async (eventName: string, data: { [key: string]: any }, channel: string, address: string) => {
   return prisma.messageOutBox.create({
     select: { id: true },
     data: {
-      templateName,
-      channelName,
+      eventName,
       data: JSON.stringify(data),
-      address: JSON.stringify(address),
+      channel,
+      address,
     },
   });
 };
@@ -91,72 +59,39 @@ const sendFailed = async (id: number) => {
   });
 };
 
-export class NotificationService {
-  private readonly channels: { [channelName: string]: Channel } = {};
-  private readonly templateRoot: string;
-  private readonly formatter: Formatter;
-
-  constructor(templateRoot: string, formatter: Formatter) {
-    this.templateRoot = templateRoot;
-    this.formatter = formatter;
-  }
-  async addChannel(channelName: string, contentTypes: string[], provider: NotificationProvider) {
-    const templates = await loadTemplates(this.templateRoot, channelName);
-    this.channels[channelName] = {
-      contentTypes,
-      provider,
-      templates: templates,
-    };
-  }
-
-  getChannel(channelName: string) {
-    return this.channels[channelName];
-  }
-
-  async send(templateName: string, channelName: string, data: { [key: string]: any }, address: string | string[]) {
-    const channel = this.getChannel(channelName);
-    if (templateName && channelName && channel && address) {
-      const subject = subjects[templateName];
-      const contentPayload = channel.contentTypes.reduce(
-        (result, contentType) => {
-          const contentFragment = format(templateName, channel, data, contentType);
-          if (contentFragment) {
-            result[contentType] = contentFragment;
-          }
-          return result;
+const getDestinations = async (recipientUid: string, eventName: string) => {
+  const result = await prisma.subscription.findMany({
+    include: {
+      contact: true,
+    },
+    where: {
+      event: eventName,
+      enabled: true,
+      contact: {
+        user: {
+          uid: recipientUid,
         },
-        {} as { [contentType: string]: string }
-      );
-
-      let message;
-      try {
-        message = await preSend(templateName, channelName, data, address);
-        await channel.provider.send(subject, contentPayload, address);
-        await sendComplete(message.id);
-      } catch (error) {
-        if (message) {
-          await sendFailed(message.id);
-        }
-      }
-    }
-  }
-}
+      },
+    },
+  });
+  return result.map((r) => ({ channel: r.channel, address: r.contact.address }));
+};
 
 class NotificationContext {
-  private readonly recipient: User;
-  private templateName: string | null = null;
-  private data: { [key: string]: any } = {};
-  private channels: string[] = [];
+  private readonly recipientUid: string;
+  private eventName?: string;
+  private data?: { [key: string]: any };
+  private channels?: string[];
 
-  constructor(recipients: User) {
-    this.recipient = recipients;
+  constructor(recipientUid: string) {
+    this.recipientUid = recipientUid;
   }
-  withMessage(template: string, data: { [key: string]: any }) {
-    this.templateName = template;
+  event(eventName: string, data: { [key: string]: any }) {
+    this.eventName = eventName;
     this.data = data;
     return this;
   }
-  overChannel(channels: string | string[]) {
+  onChannel(channels: string | string[]) {
     if (Array.isArray(channels)) {
       this.channels = channels;
     } else {
@@ -165,50 +100,83 @@ class NotificationContext {
     return this;
   }
   async send() {
-    if (this.templateName == null) {
-      return;
+    if (this.eventName == null || this.data == null) {
+      throw new Error('Missing event and data in notification context');
+    }
+    const targetChannels = this.channels;
+    let destinations: { channel: string; address: string }[] = [];
+    if (targetChannels == null) {
+      destinations = await getDestinations(this.recipientUid, this.eventName);
     } else {
-      await Promise.allSettled(
-        this.channels.map(async (channelName) => {
-          if (this.templateName != null) {
-            const contacts = await prisma.contact.findMany({
-              select: { address: true },
-              where: {
-                userId: this.recipient.id,
-                channel: channelName,
-              },
-            });
-            await notificationService.send(
-              this.templateName,
-              channelName,
-              this.data,
-              contacts.map((contact) => contact.address)
-            );
+      const user = await prisma.user.findUnique({
+        include: {
+          contacts: true,
+        },
+        where: {
+          uid: this.recipientUid,
+        },
+      });
+      if (user) {
+        destinations = user.contacts
+          .filter((c) => targetChannels.indexOf(c.channel) > -1)
+          .map((c) => ({ channel: c.channel, address: c.address }));
+      }
+    }
+    const eventName = this.eventName;
+    const data = this.data;
+
+    destinations.map(async ({ channel, address }) => {
+      const registrations = notifications.allChannels.filter((registration) => registration.channel === channel);
+
+      return Promise.all(
+        registrations.map(async (registration) => {
+          const message = await beforeSend(eventName, data, channel, address);
+          try {
+            await registration.provider.send(eventName, data, address);
+            await sendComplete(message.id);
+          } catch (error) {
+            await sendFailed(message.id);
           }
         })
       );
-    }
+    });
   }
 }
 
-const notificationService = new NotificationService(config.app.templateRoot, format);
-notificationService.addChannel('email', ['html', 'txt'], new SendGridProvider());
-
-export const notify = (recipient: User) => new NotificationContext(recipient);
-
-export const notifyEvent = async (recipient: User, event: string) => {
-  const context = new NotificationContext(recipient);
-  const subscriptions = await prisma.subscription.findMany({
-    select: {
-      channel: true,
-    },
+export const notify = (recipientUid: string) => new NotificationContext(recipientUid);
+export const notifyContact = async (contactUid: string, eventName: string, data: { [key: string]: any }) => {
+  const contact = await prisma.contact.findUnique({
     where: {
-      userId: recipient.id,
-      enabled: true,
-      event: event,
+      uid: contactUid,
     },
   });
-  return context.overChannel(subscriptions.map((sub) => sub.channel));
+  if (contact != null) {
+    const providers = notifications.allChannels
+      .filter((registration) => registration.channel === contact.channel)
+      .map((registration) => registration.provider);
+    providers.map(async (p) => {
+      const message = await beforeSend(eventName, data, contact.channel, contact.address);
+      try {
+        await p.send(eventName, data, contact.address);
+        await sendComplete(message.id);
+      } catch (error) {
+        await sendFailed(message.id);
+      }
+    });
+  }
 };
+export default notifications;
 
-export default notificationService;
+const purgeOldData = async (cutOff: Date) => {
+  await prisma.messageOutBox.deleteMany({
+    where: {
+      sentAt: { lt: cutOff },
+    },
+  });
+};
+purgeOldData(DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate()).then(() => {
+  cron('0 0 0 * * *', async () => {
+    const cutOff = DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate();
+    await purgeOldData(cutOff);
+  });
+});

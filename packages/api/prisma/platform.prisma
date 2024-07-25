@@ -62,14 +62,16 @@ model Permission {
 }
 
 model Contact {
-  id       Int     @id @default(autoincrement())
-  userId   Int
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  uid      String  @unique @default(cuid())
-  userUid  String
-  channel  String
-  address  String
-  verified Boolean @default(false)
+  id               Int            @id @default(autoincrement())
+  userId           Int
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uid              String         @unique @default(cuid())
+  userUid          String
+  channel          String
+  address          String
+  verified         Boolean        @default(false)
+  passwordRecovery Boolean        @default(false)
+  Subscription     Subscription[]
 }
 
 model AuthScheme {
@@ -91,24 +93,26 @@ model ExpiredToken {
 }
 
 model Subscription {
-  id      Int     @id
-  userId  Int
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event   String
-  channel String
-  enabled Boolean
+  id        Int     @id
+  contactId Int
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  event     String
+  channel   String
+  enabled   Boolean
+  User      User?   @relation(fields: [userId], references: [id])
+  userId    Int?
 }
 
 model MessageOutBox {
-  id           Int       @id @default(autoincrement())
-  templateName String
-  channelName  String
-  data         String
-  address      String
-  sentAt       DateTime  @default(now())
-  lastSentAt   DateTime?
-  status       String    @default("pending")
-  errorCount   Int       @default(0)
+  id         Int       @id @default(autoincrement())
+  eventName  String
+  data       String
+  channel    String
+  address    String
+  sentAt     DateTime  @default(now())
+  lastSentAt DateTime?
+  status     String    @default("pending")
+  errorCount Int       @default(0)
 }
 
 model Preference {
