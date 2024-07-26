@@ -98,6 +98,7 @@ export const initialise = async (extensionLocation: string, options: { [key: str
 };
 
 const scheduleTask = (schedule: number | string, task: () => void): Promise<void> | ScheduledTask => {
+  // TODO : do not schedule immediately, only schedule when plugin starts
   if (typeof schedule === 'number') {
     return delay(schedule, task);
   } else {

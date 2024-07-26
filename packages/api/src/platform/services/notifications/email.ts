@@ -22,7 +22,7 @@ export class SendGridProvider extends NotificationProvider {
     const parts = templatePath.split('.');
     if (parts.length > 2) {
       const contentType = parts[parts.length - 2];
-      const eventName = parts.slice(0, length - 2).join('.');
+      const eventName = parts.slice(0, parts.length - 2).join('.');
 
       let eventTemplates = this.emailTemplates[eventName];
       if (!eventTemplates) {
