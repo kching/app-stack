@@ -4,11 +4,11 @@ import { getLogger } from './logger';
 import { scanForFiles } from './fileUtils';
 import { WebSocketHandler, WebSocketRouter } from './wsRouter';
 import { Logger } from 'winston';
-import { cron, delay } from './scheduler';
-import { ScheduledTask } from 'node-cron';
+import { schedule, ScheduledTask } from 'node-cron';
 import passport from 'passport';
 import { config } from './config';
 import { isMatch } from 'micromatch';
+import { clearInterval } from 'node:timers';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -46,8 +46,8 @@ export type Service = {
   set id(value: string);
   setId: (id: string) => void;
   logger: Logger;
-  onStart: typeof Plugin.prototype.onStart;
-  onStop: typeof Plugin.prototype.onStop;
+  onStart: typeof Plugin.prototype.onStarted;
+  onStop: typeof Plugin.prototype.onStopping;
   useEndpoint: typeof Plugin.prototype.useEndpoint;
   useWebSocket: typeof Plugin.prototype.useWebsocket;
   scheduleTask: (schedule: number | string, task: () => void) => void;
@@ -97,26 +97,17 @@ export const initialise = async (extensionLocation: string, options: { [key: str
   );
 };
 
-const scheduleTask = (schedule: number | string, task: () => void): Promise<void> | ScheduledTask => {
-  // TODO : do not schedule immediately, only schedule when plugin starts
-  if (typeof schedule === 'number') {
-    return delay(schedule, task);
-  } else {
-    return cron(schedule, task);
-  }
-};
-
 const createContext = (plugin: Plugin): Service => ({
   id: plugin.id,
   setId: (value: string) => {
     plugin.id = value;
   },
   logger: getLogger(plugin.id),
-  onStart: Plugin.prototype.onStart.bind(plugin),
-  onStop: Plugin.prototype.onStop.bind(plugin),
+  onStart: Plugin.prototype.onStarted.bind(plugin),
+  onStop: Plugin.prototype.onStopping.bind(plugin),
   useEndpoint: Plugin.prototype.useEndpoint.bind(plugin),
   useWebSocket: Plugin.prototype.useWebsocket.bind(plugin),
-  scheduleTask: scheduleTask,
+  scheduleTask: Plugin.prototype.scheduleTask.bind(plugin),
 });
 
 export class PluginInitialisationError extends Error {
@@ -144,6 +135,8 @@ export class PluginInitialisationError extends Error {
 export class Plugin {
   private readonly endpoints: EndpointRegistration[] = [];
   private readonly webSocketEndpoints: WebSocketEndpointRegistration[] = [];
+  private readonly cronTasks: ScheduledTask[] = [];
+  private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: NodeJS.Timeout }[] = [];
   private readonly options: { [key: string]: any } = {};
   private readonly executionContext: Service;
   private readonly init: Promise<string>;
@@ -161,12 +154,12 @@ export class Plugin {
     this.options = options;
 
     this.executionContext = createContext(this);
-    this.init = new Promise<string[] | void>((resolve, reject) => {
+    this.init = new Promise<string[] | void>((resolve) => {
       resolve(func.call(this.executionContext, options));
     })
       .then((dependsOn) => {
-        if (dependsOn) {
-          this.dependsOn = dependsOn ?? [];
+        if (Array.isArray(dependsOn)) {
+          this.dependsOn = dependsOn;
         }
         if (allPlugins[this._id] != null) {
           logger.error(`Plugin ID conflict: Multiple plugins have the same ID ${this._id}`);
@@ -236,6 +229,10 @@ export class Plugin {
           this.wsRouter.registerEndpoint(path, handler);
         }
       });
+      this.cronTasks.forEach((task) => task.start());
+      this.intervalTasks.forEach((task) => {
+        task.intervalId = setInterval(task.func, task.repeat);
+      });
       if (typeof this.startCallback === 'function') {
         await this.startCallback(this.executionContext, this.options);
       }
@@ -252,6 +249,10 @@ export class Plugin {
       if (typeof this.stopCallback === 'function') {
         await this.stopCallback(this.executionContext, this.options);
       }
+      this.intervalTasks.forEach((task) => {
+        clearInterval(task.intervalId);
+      });
+      this.cronTasks.forEach((task) => task.stop());
       this.endpoints
         .map((endpoint) => endpoint.path)
         .forEach((path) => {
@@ -288,11 +289,23 @@ export class Plugin {
     }
   }
 
-  onStart(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
+  scheduleTask(repeat: string | number, task: () => void) {
+    if (typeof task !== 'function') {
+      throw new Error('Expect parameter task to be a function.');
+    }
+    if (typeof repeat === 'string') {
+      const cronTask = schedule(repeat, task);
+      this.cronTasks.push(cronTask);
+    } else if (!isNaN(repeat)) {
+      this.intervalTasks.push({ repeat, func: task });
+    }
+  }
+
+  onStarted(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
     this.startCallback = handler;
   }
 
-  onStop(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
+  onStopping(handler: (context?: Service, options?: { [key: string]: any }) => void | Promise<any>) {
     this.stopCallback = handler;
   }
 }
