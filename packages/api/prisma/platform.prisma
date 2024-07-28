@@ -69,6 +69,7 @@ model Contact {
   userUid          String
   channel          String
   address          String
+  secret           String? // some channels may require authentication ie. Telegram
   verified         Boolean        @default(false)
   passwordRecovery Boolean        @default(false)
   Subscription     Subscription[]

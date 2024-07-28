@@ -1,8 +1,6 @@
 import express, { Express, json, static as staticResource } from 'express';
 import { config } from './config';
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import { WebSocketRouter } from './wsRouter';
 import cookieParser from 'cookie-parser';
 import { initialise, Plugin, PluginInitialisationError } from './plugin';
 import { flatten } from 'lodash';
@@ -10,11 +8,11 @@ import { getLogger } from './logger';
 import passport from 'passport';
 import { jwt } from './services/userManagement/auth';
 import { Server } from 'node:http';
+import { createWebSocketServer } from './webSockets';
 
 const app = express();
 const httpServer = createServer(app);
-const webSocketServer = new WebSocketServer({ server: httpServer });
-const wsRouter = new WebSocketRouter(webSocketServer);
+const webSocketServer = createWebSocketServer(httpServer);
 
 const router = express.Router({});
 router.use(json());
@@ -31,7 +29,7 @@ const startPlugins = async (roots: string[], options: { [key: string]: any } = {
     .filter((plugin) => plugin != null);
   for (const plugin of plugins) {
     try {
-      await plugin.withRouter(router).withWebSocketRouter(wsRouter).start();
+      await plugin.withRouter(router).withWebSocket(webSocketServer).start();
     } catch (error) {
       if (error instanceof PluginInitialisationError) {
         const pluginStartError = error as PluginInitialisationError;

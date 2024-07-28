@@ -1,16 +1,16 @@
 import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
 import { config } from '../../config';
 import { platformPrisma as prisma } from '../../prisma';
-import { cron } from '../../scheduler';
 import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
-import { notify, notifyContact } from '../notifications';
+import { notifyContact } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { findUserByUid } from './userGroups';
 import { publish } from '../../events';
 import { getLogger } from '../../logger';
+import { schedule } from 'node-cron';
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -32,7 +32,7 @@ const purgeExpiredTokens = async () => {
   });
 };
 purgeExpiredTokens().then(() => {
-  cron('0 0 0 * * *', purgeExpiredTokens);
+  schedule('0 0 0 * * *', purgeExpiredTokens);
 });
 
 export const jwt = () => {

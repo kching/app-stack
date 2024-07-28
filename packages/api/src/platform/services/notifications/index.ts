@@ -1,8 +1,8 @@
 import { config } from '../../config';
 import { platformPrisma as prisma } from '../../prisma';
 import { DateTime } from 'luxon';
-import { cron } from '../../scheduler';
 import { NotificationProvider } from '../../types';
+import { schedule } from 'node-cron';
 
 type ChannelRegistration = {
   channel: string;
@@ -175,7 +175,7 @@ const purgeOldData = async (cutOff: Date) => {
   });
 };
 purgeOldData(DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate()).then(() => {
-  cron('0 0 0 * * *', async () => {
+  schedule('0 0 0 * * *', async () => {
     const cutOff = DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate();
     await purgeOldData(cutOff);
   });

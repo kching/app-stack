@@ -2,7 +2,7 @@ import path from 'path';
 import { RequestHandler, Router } from 'express';
 import { getLogger } from './logger';
 import { scanForFiles } from './fileUtils';
-import { WebSocketHandler, WebSocketRouter } from './wsRouter';
+import { UseWebSocketOptions, WebSocketProxy, WSServer } from './webSockets';
 import { Logger } from 'winston';
 import { schedule, ScheduledTask } from 'node-cron';
 import passport from 'passport';
@@ -32,11 +32,6 @@ class EndpointRegistration {
   }
 }
 
-type WebSocketEndpointRegistration = {
-  path: string;
-  handler: WebSocketHandler;
-};
-
 type PluginStatus = 'created' | 'starting' | 'started' | 'stopping' | 'stopped';
 
 const allPlugins: { [pluginId: string]: Plugin } = {};
@@ -49,7 +44,7 @@ export type Service = {
   onStart: typeof Plugin.prototype.onStarted;
   onStop: typeof Plugin.prototype.onStopping;
   useEndpoint: typeof Plugin.prototype.useEndpoint;
-  useWebSocket: typeof Plugin.prototype.useWebsocket;
+  useWebSocket: typeof Plugin.prototype.useWebSocket;
   scheduleTask: (schedule: number | string, task: () => void) => void;
 };
 
@@ -106,7 +101,7 @@ const createContext = (plugin: Plugin): Service => ({
   onStart: Plugin.prototype.onStarted.bind(plugin),
   onStop: Plugin.prototype.onStopping.bind(plugin),
   useEndpoint: Plugin.prototype.useEndpoint.bind(plugin),
-  useWebSocket: Plugin.prototype.useWebsocket.bind(plugin),
+  useWebSocket: Plugin.prototype.useWebSocket.bind(plugin),
   scheduleTask: Plugin.prototype.scheduleTask.bind(plugin),
 });
 
@@ -134,7 +129,7 @@ export class PluginInitialisationError extends Error {
 
 export class Plugin {
   private readonly endpoints: EndpointRegistration[] = [];
-  private readonly webSocketEndpoints: WebSocketEndpointRegistration[] = [];
+  private readonly webSocketProxies: WebSocketProxy[] = [];
   private readonly cronTasks: ScheduledTask[] = [];
   private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: NodeJS.Timeout }[] = [];
   private readonly options: { [key: string]: any } = {};
@@ -145,7 +140,7 @@ export class Plugin {
   private dependsOn: string[] = [];
   private _status: PluginStatus = 'created';
   private router?: Router;
-  private wsRouter?: WebSocketRouter;
+  private webSocketServer?: WSServer;
   private startCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
   private stopCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
 
@@ -190,8 +185,8 @@ export class Plugin {
     return this;
   }
 
-  withWebSocketRouter(wsRouter: WebSocketRouter) {
-    this.wsRouter = wsRouter;
+  withWebSocket(webSocketServer: WSServer) {
+    this.webSocketServer = webSocketServer;
     return this;
   }
 
@@ -209,8 +204,8 @@ export class Plugin {
             if (this.router) {
               dependPlugin.withRouter(this.router);
             }
-            if (this.wsRouter) {
-              dependPlugin.withWebSocketRouter(this.wsRouter);
+            if (this.webSocketServer) {
+              dependPlugin.withWebSocket(this.webSocketServer);
             }
             return dependPlugin.start(dependencyChain);
           } else {
@@ -224,11 +219,12 @@ export class Plugin {
           registerEndpoint(this.router, reg);
         }
       });
-      this.webSocketEndpoints.forEach(({ path, handler }) => {
-        if (this.wsRouter != null) {
-          this.wsRouter.registerEndpoint(path, handler);
+      this.webSocketProxies.forEach((wsProxy) => {
+        if (this.webSocketServer != null) {
+          this.webSocketServer.register(wsProxy);
         }
       });
+
       this.cronTasks.forEach((task) => task.start());
       this.intervalTasks.forEach((task) => {
         task.intervalId = setInterval(task.func, task.repeat);
@@ -264,11 +260,11 @@ export class Plugin {
             }
           }
         });
-      if (this.wsRouter) {
-        this.webSocketEndpoints.forEach((endpoint) => {
-          // this.wsRouter.unregisterEndpoint(...)
-        });
-      }
+      this.webSocketProxies.forEach((wsProxy) => {
+        if (this.webSocketServer != null) {
+          this.webSocketServer.unregister(wsProxy);
+        }
+      });
       this._status = 'stopped';
     }
   }
@@ -282,11 +278,13 @@ export class Plugin {
     return reg;
   }
 
-  useWebsocket(path: string, handler: WebSocketHandler) {
-    this.webSocketEndpoints.push({ path, handler });
-    if (this.wsRouter && this._status === 'started') {
-      this.wsRouter.registerEndpoint(path, handler);
+  useWebSocket(path: string, options: UseWebSocketOptions): WebSocketProxy {
+    let socketRegistration = this.webSocketProxies.find((r) => r.path === path);
+    if (!socketRegistration) {
+      socketRegistration = new WebSocketProxy(path, options);
+      this.webSocketProxies.push(socketRegistration);
     }
+    return socketRegistration;
   }
 
   scheduleTask(repeat: string | number, task: () => void) {
