@@ -113,7 +113,7 @@ same way, the distinction is only made in order keep them in different namespace
 A service exists in one of the 5 states:
 1. INITIALISED
 2. STARTING
-3. RUNNING
+3. STARTED
 4. STOPPING
 5. STOPPED
 
@@ -125,10 +125,10 @@ but it's not active yet.
 When the platform starts via the `platform.start()` call, all initialized services will undergo the start up process where
 the lifecycle status transitions to `STARTING`. All registered handlers and background jobs registered in the `init()` 
 function are brought to live. If there was an `onStart` callback registered, the callback is invoked at this point. After
-the execution of `onStart` callback, the service is transitioned into the `RUNNING` state.
+the execution of `onStarted` callback, the service is transitioned into the `STARTED` state.
  
 A running service may be stopped, either individually or together as a group as the application exits. When a service stops,
-its lifecycle status is set to `STOPPING`. If there was a `onStop` callback defined in the `init()` function, it will be called,
+its lifecycle status is set to `STOPPING`. If there was a `onStopping` callback defined in the `init()` function, it will be called,
 follow by a removal of handlers from API endpoints and websocket routes. When the all handlers and background tasks are removed, 
 the service is transitioned into a `STOPPED` state.
 
