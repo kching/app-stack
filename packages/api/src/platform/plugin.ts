@@ -9,6 +9,8 @@ import passport from 'passport';
 import { config } from './config';
 import { isMatch } from 'micromatch';
 import { clearInterval } from 'node:timers';
+import { Resource } from './resources';
+import { Platform } from './index';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -46,6 +48,7 @@ export type Service = {
   useEndpoint: typeof Plugin.prototype.useEndpoint;
   useWebSocket: typeof Plugin.prototype.useWebSocket;
   scheduleTask: (schedule: number | string, task: () => void) => void;
+  getResource: (path: string) => Promise<Resource[]>;
 };
 
 type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promise<void> | Promise<string[]> | void;
@@ -65,7 +68,12 @@ const registerEndpoint = (router: Router, { method, path, authProviders, handler
   }
 };
 
-export const initialise = async (extensionLocation: string, options: { [key: string]: any } = {}) => {
+export const initialise = async (
+  platform: Platform,
+  extensionLocation: string,
+  options: { [key: string]: any } = {}
+) => {
+  options = { ...options, platform };
   const pluginFiles = await scanForFiles(extensionLocation, (file) => {
     return isMatch(file.name, config.app.extensionFilePattern);
   });
@@ -92,7 +100,7 @@ export const initialise = async (extensionLocation: string, options: { [key: str
   );
 };
 
-const createContext = (plugin: Plugin): Service => ({
+const createContext = (plugin: Plugin, platform: Platform): Service => ({
   id: plugin.id,
   setId: (value: string) => {
     plugin.id = value;
@@ -103,6 +111,7 @@ const createContext = (plugin: Plugin): Service => ({
   useEndpoint: Plugin.prototype.useEndpoint.bind(plugin),
   useWebSocket: Plugin.prototype.useWebSocket.bind(plugin),
   scheduleTask: Plugin.prototype.scheduleTask.bind(plugin),
+  getResource: platform?.getResourceResolver()?.resolve,
 });
 
 export class PluginInitialisationError extends Error {
@@ -148,7 +157,7 @@ export class Plugin {
     this._id = id;
     this.options = options;
 
-    this.executionContext = createContext(this);
+    this.executionContext = createContext(this, options.platform);
     this.init = new Promise<string[] | void>((resolve) => {
       resolve(func.call(this.executionContext, options));
     })

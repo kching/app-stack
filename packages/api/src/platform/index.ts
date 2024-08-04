@@ -9,6 +9,9 @@ import passport from 'passport';
 import { jwt } from './services/userManagement/auth';
 import { Server } from 'node:http';
 import { createWebSocketServer } from './webSockets';
+import { ChainedResourceResolver, PrismaResourceResolver, ResourceResolver } from './resources';
+import { platformPrisma } from './prisma';
+import { PrismaClient } from '@prisma/client';
 
 const app = express();
 const httpServer = createServer(app);
@@ -20,8 +23,8 @@ router.use(cookieParser());
 router.use(passport.initialize());
 passport.use(jwt());
 
-const startPlugins = async (roots: string[], options: { [key: string]: any } = {}) => {
-  const coreInitialisations = await Promise.all(roots.map((coreRoot) => initialise(coreRoot, options)));
+const startPlugins = async (platform: Platform, roots: string[], options: { [key: string]: any } = {}) => {
+  const coreInitialisations = await Promise.all(roots.map((coreRoot) => initialise(platform, coreRoot, options)));
   const plugins = flatten(coreInitialisations)
     .filter((r) => r.status === 'fulfilled')
     .filter((settledResult) => settledResult.status === 'fulfilled')
@@ -42,25 +45,37 @@ const startPlugins = async (roots: string[], options: { [key: string]: any } = {
   return plugins;
 };
 
-class Platform {
+const platformResourceResolver = new PrismaResourceResolver(platformPrisma as unknown as PrismaClient);
+
+export class Platform {
   private _plugins: { [id: string]: Plugin } = {};
   private _apiRoot = config.app.apiRoot;
   private _staticRoot = config.app.staticRoot;
   private _extensionRoots: string[] = config.app.extensionRoots;
   private _onShutdown?: () => Promise<void> | void;
 
+  private _resourceResolver: ResourceResolver = platformResourceResolver;
+
   apiRoot(root: string): Platform {
     this._apiRoot = root;
     return this;
   }
+
   staticRoot(root: string): Platform {
     this._staticRoot = root;
     return this;
   }
+
   extensionRoots(extensions: string[]): Platform {
     this._extensionRoots = extensions;
     return this;
   }
+
+  resourceResolvers(...resourceResolvers: ResourceResolver[]): Platform {
+    this._resourceResolver = new ChainedResourceResolver(...resourceResolvers, platformResourceResolver);
+    return this;
+  }
+
   configure(func: (app: Express) => void) {
     func(app);
     return this;
@@ -68,17 +83,21 @@ class Platform {
 
   private readonly serviceRoots = ['./src/platform/services'];
 
+  getResourceResolver() {
+    return this._resourceResolver;
+  }
+
   async start(callBack?: (httpServer: Server) => Promise<void>, port?: number) {
     let services: Plugin[] = [];
     try {
-      services = await startPlugins(this.serviceRoots, { idPrefix: 'platform/' });
+      services = await startPlugins(this, this.serviceRoots, { idPrefix: 'platform/' });
     } catch (error) {
       getLogger().error('Failed to initialize platform service');
       console.error(error);
       process.exit(1);
     }
 
-    const extensions = await startPlugins(this._extensionRoots);
+    const extensions = await startPlugins(this, this._extensionRoots);
     extensions.forEach((plugin) => {
       this._plugins[plugin.id] = plugin;
     });

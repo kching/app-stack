@@ -4,7 +4,7 @@
   "description": "",
   "private": true,
   "scripts": {
-    "clean": "rm -rf dist && mkdir dist",
+    "clean": "rm -rf dist/**",
     "dev": "npm run dev --ws",
     "build": "npm run build --ws",
     "test": "npm run test --ws"

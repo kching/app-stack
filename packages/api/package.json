@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "clean": "rm -rf prisma/generated/*",
     "dev": "NODE_ENV=dev nodemon src/main.ts",
     "start": "NODE_ENV=prod ts-node src/main.ts",
     "build": "prisma generate --schema prisma/platform.prisma && tsc -p tsconfig.json",

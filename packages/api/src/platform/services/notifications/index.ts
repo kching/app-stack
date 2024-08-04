@@ -1,8 +1,12 @@
 import { config } from '../../config';
 import { platformPrisma as prisma } from '../../prisma';
 import { DateTime } from 'luxon';
-import { NotificationProvider } from '../../types';
 import { schedule } from 'node-cron';
+
+export abstract class NotificationProvider {
+  protected constructor() {}
+  abstract send(event: string, data: { [key: string]: any }, recipientAddress: string | string[]): Promise<void>;
+}
 
 type ChannelRegistration = {
   channel: string;

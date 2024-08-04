@@ -1,4 +1,5 @@
 import { Service, Plugin } from './plugin';
+import { Platform } from './index';
 
 describe('plugin', () => {
   it('should call plugin initialisation function', async () => {

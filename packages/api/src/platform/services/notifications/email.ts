@@ -1,9 +1,9 @@
 import sendGridMail from '@sendgrid/mail';
 import { config } from '../../config';
-import { NotificationProvider } from '../../types';
 import { readYaml, scanForFiles } from '../../fileUtils';
 import pug, { compileTemplate } from 'pug';
 import { getLogger } from '../../logger';
+import { NotificationProvider } from './index';
 
 export class SendGridProvider extends NotificationProvider {
   private readonly subjects = readYaml(`${config.app.templateRoot}/email/subjects.yaml`);
