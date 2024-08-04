@@ -88,11 +88,6 @@ model AuthScheme {
   @@unique([scheme, userId])
 }
 
-model ExpiredToken {
-  token        String   @id
-  expiredSince DateTime @default(now())
-}
-
 model Subscription {
   id        Int     @id
   contactId Int

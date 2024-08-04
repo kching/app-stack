@@ -6,7 +6,7 @@
     "dev": "NODE_ENV=dev nodemon src/main.ts",
     "start": "NODE_ENV=prod ts-node src/main.ts",
     "build": "prisma generate --schema prisma/platform.prisma && tsc -p tsconfig.json",
-    "db:generate": "prisma db push --schema prisma/platform.prisma",
+    "db:push": "prisma db push --schema prisma/platform.prisma",
     "test": "jest --max-worker=4 --coverage"
   },
   "author": "",

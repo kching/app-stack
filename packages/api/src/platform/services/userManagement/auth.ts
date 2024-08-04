@@ -10,9 +10,25 @@ import fromExtractors = ExtractJwt.fromExtractors;
 import { findUserByUid } from './userGroups';
 import { publish } from '../../events';
 import { getLogger } from '../../logger';
-import { schedule } from 'node-cron';
+import fs from 'fs';
+import { randomBytes } from 'node:crypto';
 
 type CookieRequest = { cookies: { [key: string]: string } };
+
+let jwtSecret: string | Buffer | undefined = undefined;
+const getJwtSecret = () => {
+  if (jwtSecret == null) {
+    const envJwtSecret = config.env['JWT_SECRET'] as unknown as string;
+    if (envJwtSecret == null || envJwtSecret.trim().length === 0) {
+      jwtSecret = randomBytes(32).toString('hex');
+    } else if (envJwtSecret.startsWith('file://')) {
+      jwtSecret = fs.readFileSync(envJwtSecret.substring('file://'.length));
+    } else {
+      jwtSecret = envJwtSecret;
+    }
+  }
+  return jwtSecret;
+};
 
 const fromCookieAsToken = (req: CookieRequest) => {
   if (req && req.cookies) {
@@ -22,24 +38,10 @@ const fromCookieAsToken = (req: CookieRequest) => {
   }
 };
 
-const purgeExpiredTokens = async () => {
-  prisma.expiredToken.deleteMany({
-    where: {
-      expiredSince: {
-        lt: new Date(Date.now() - config.auth.sessionMaxAgeSeconds * 1000),
-      },
-    },
-  });
-};
-purgeExpiredTokens().then(() => {
-  schedule('0 0 0 * * *', purgeExpiredTokens);
-});
-
 export const jwt = () => {
-  const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
   const options = {
     jwtFromRequest: fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), fromCookieAsToken]),
-    secretOrKey: JWT_SECRET,
+    secretOrKey: getJwtSecret(),
     issuer: config.auth.issuer,
     audience: config.app.domain,
     passReqToCallback: true,
@@ -48,23 +50,15 @@ export const jwt = () => {
   //@ts-ignore
   return new JwtStrategy(options, async (req, jwtPayload, done) => {
     try {
-      const token = req.header('Authorization')?.substring(7) || req.cookies['access-token'];
-      const expiredToken = await prisma.expiredToken.findUnique({
-        where: { token },
+      const user = await prisma.user.findUnique({
+        include: {
+          authSchemes: true,
+        },
+        where: {
+          uid: jwtPayload.sub as string,
+        },
       });
-      if (expiredToken) {
-        done(null, null);
-      } else {
-        const user = await prisma.user.findUnique({
-          include: {
-            authSchemes: true,
-          },
-          where: {
-            uid: jwtPayload.sub as string,
-          },
-        });
-        done(null, user);
-      }
+      done(null, user);
     } catch (error) {
       done(error, null);
     }
@@ -91,13 +85,13 @@ export const findAuthByScheme = async (scheme: string, username: string) => {
   });
 };
 
-const createAccessToken = (user: User, secret: string) => {
+const createAccessToken = async (user: User) => {
   return Jwt.sign(
     {
       displayName: user.displayName,
       permissions: [],
     },
-    secret,
+    getJwtSecret(),
     {
       subject: user.uid,
       issuer: config.auth.issuer,
@@ -106,8 +100,9 @@ const createAccessToken = (user: User, secret: string) => {
     }
   );
 };
-const createRefreshToken = (user: User, secret: string) => {
-  return Jwt.sign({}, secret, {
+
+const createRefreshToken = async (user: User) => {
+  return Jwt.sign({}, getJwtSecret(), {
     subject: user.uid,
     issuer: config.auth.issuer,
     audience: config.app.domain,
@@ -118,11 +113,10 @@ const createRefreshToken = (user: User, secret: string) => {
 export async function init(this: Service) {
   this.setId('platform/auth');
   this.useEndpoint('post', '/login', async (req, res) => {
-    const JWT_SECRET = config.env['JWT_SECRET'] as unknown as string;
     let refreshToken = req.cookies['refresh-token'];
     let user: User | null = null;
     if (refreshToken) {
-      const payload = Jwt.verify(refreshToken, JWT_SECRET, {
+      const payload = Jwt.verify(refreshToken, getJwtSecret(), {
         audience: config.app.domain,
         clockTolerance: 6000,
       });
@@ -150,9 +144,9 @@ export async function init(this: Service) {
 
     if (user) {
       if (!refreshToken) {
-        refreshToken = createRefreshToken(user, JWT_SECRET);
+        refreshToken = await createRefreshToken(user);
       }
-      const accessToken = createAccessToken(user, JWT_SECRET);
+      const accessToken = await createAccessToken(user);
 
       res
         .status(200)
@@ -177,22 +171,6 @@ export async function init(this: Service) {
 
   this.useEndpoint('post', '/logout', async (req, res) => {
     const user = req.user as { uid: string };
-    const accessToken = req.header('Authorization') || req.cookies['access-token'];
-    const refreshToken = req.cookies['refresh-token'];
-    if (accessToken) {
-      await prisma.expiredToken.upsert({
-        where: { token: accessToken },
-        create: { token: accessToken },
-        update: {},
-      });
-    }
-    if (refreshToken) {
-      await prisma.expiredToken.upsert({
-        where: { token: refreshToken },
-        create: { token: refreshToken },
-        update: {},
-      });
-    }
     res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
     publish('auth.loggedOut', { userUid: user.uid });
   });
