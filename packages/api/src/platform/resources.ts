@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 export type ResourceLike = {
+  resourceType: string;
   uid: string;
   [key: string]: any;
 };
@@ -47,12 +48,14 @@ export class ResourcePath {
     if (path.indexOf('/') === -1) {
       throw new Error(`Invalid resource path: ${path}`);
     }
-    const [type, rest] = path.split('/');
-    this._type = type;
+    const index = path.indexOf('/');
+    this._type = path.substring(0, index);
+    const rest = path.substring(index + 1);
 
     if (rest.indexOf('[') > -1 || rest.indexOf(']') > -1) {
-      if (rest.match(/^\[(.+)=(.+)]$/)) {
-        this._filter = rest.slice(1, rest.length - 1).split('=');
+      const filter = rest.match(/^\[(.+)="(.+)"]$/);
+      if (filter) {
+        this._filter = filter.slice(1);
       } else {
         throw new Error(`Invalid resource path: ${path}`);
       }

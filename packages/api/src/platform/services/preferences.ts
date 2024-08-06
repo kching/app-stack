@@ -1,7 +1,9 @@
 import { Service } from '../plugin';
 import { platformPrisma as prisma } from '../prisma';
-import { Flags, hasPermission } from './userManagement/permissions';
 import { publish } from '../events';
+import { SecurityContext, Permissions } from '../accessControl';
+import { AccessDeniedError } from '../errors';
+import { UserContext } from './userManagement/auth';
 
 type Preference = {
   namespace: string;
@@ -46,22 +48,30 @@ export const getPreferenceValue = async (
   }
 };
 
-export const getPreferences = async (callerId: string, ownerUid: string, namespace: string) => {
-  // TODO: check permissions
-  return prisma.preference.findMany({
-    where: {
-      ownerUid,
-      namespace,
-    },
-  });
+export const getPreferences = async (securityContext: SecurityContext, ownerUid: string, namespace: string) => {
+  const resource = `preference/[ownerUid="${ownerUid}"]`;
+  const allowed = await securityContext.hasPermissions(Permissions.READ, resource);
+  if (allowed) {
+    return prisma.preference.findMany({
+      where: {
+        ownerUid,
+        namespace,
+      },
+    });
+  } else {
+    throw new AccessDeniedError(securityContext, resource, Permissions.READ);
+  }
 };
 
-export const updatePreference = async (callerId: string, ownerUid: string, { action, preference }: PrefsUpdate) => {
-  // TODO: check for permissions
-  const allowed = await hasPermission(
-    callerId,
-    `preference/ownerUid=${ownerUid}`,
-    Flags.CREATE | Flags.UPDATE | Flags.DELETE
+export const updatePreference = async (
+  securityContext: SecurityContext,
+  ownerUid: string,
+  { action, preference }: PrefsUpdate
+) => {
+  const resource = `preference/[ownerUid="${ownerUid}"]`;
+  const allowed = await securityContext.hasPermissions(
+    Permissions.CREATE | Permissions.UPDATE | Permissions.DELETE,
+    resource
   );
   if (allowed) {
     const { namespace, attribute, value } = preference;
@@ -121,39 +131,59 @@ export const updatePreference = async (callerId: string, ownerUid: string, { act
 
 export async function init(this: Service) {
   this.useEndpoint('get', '/users/:uid/prefs', async (req, res) => {
-    const callerUid = (req.user as { uid: string }).uid;
+    const userContext = req.user as UserContext;
     const { uid } = req.params;
-    const ownerUid = `user:${uid}`;
-    const { namespace } = req.query as { namespace: string };
-    const prefs = await getPreferences(callerUid, ownerUid, namespace);
-    res.status(200).json(prefs);
+    try {
+      if (userContext) {
+        const ownerUid = `user/${uid}`;
+        const { namespace } = req.query as { namespace: string };
+        const prefs = await getPreferences(userContext.securityContext, ownerUid, namespace);
+        res.status(200).json(prefs);
+      } else {
+        res.status(401).end();
+      }
+    } catch (error) {
+      if (error instanceof AccessDeniedError) {
+        res.status(401).end();
+      } else {
+        res.status(500);
+      }
+    }
   });
   this.useEndpoint('patch', '/users/:uid', async (req, res) => {
-    const callUid = (req.user as { uid: string })?.uid;
-    const { uid } = req.params;
-    const ownerUid = `user:${uid}`;
-    if (Array.isArray(req.body as PrefsUpdate[])) {
-      req.body.map((prefsUpdate: PrefsUpdate) => {
-        updatePreference(callUid, ownerUid, prefsUpdate);
-      });
+    const securityContext = (req.user as UserContext).securityContext;
+    if (securityContext) {
+      try {
+        const { uid } = req.params;
+        if (Array.isArray(req.body as PrefsUpdate[])) {
+          req.body.map((prefsUpdate: PrefsUpdate) => {
+            updatePreference(securityContext, `user/${uid}`, prefsUpdate);
+          });
+        }
+      } catch (error) {
+        if (error instanceof AccessDeniedError) {
+          res.status(401).end();
+        } else {
+          res.status(500).end();
+        }
+      }
+    } else {
+      res.status(401).end();
     }
-    res.status(200).end();
   });
   this.useEndpoint('get', '/groups/:uid/prefs', async (req, res) => {
-    const callerUid = (req.user as { uid: string }).uid;
+    const securityContext = (req.user as UserContext).securityContext;
     const { uid } = req.params;
-    const ownerUid = `group:${uid}`;
     const { namespace } = req.query as { namespace: string };
-    const prefs = await getPreferences(callerUid, ownerUid, namespace);
+    const prefs = await getPreferences(securityContext, `user/${uid}`, namespace);
     res.status(200).json(prefs);
   });
   this.useEndpoint('patch', '/groups/:uid', async (req, res) => {
-    const callUid = (req.user as { uid: string })?.uid;
+    const securityContxt = (req.user as UserContext).securityContext;
     const { uid } = req.params;
-    const ownerUid = `group:${uid}`;
     if (Array.isArray(req.body as PrefsUpdate[])) {
       req.body.map((prefsUpdate: PrefsUpdate) => {
-        updatePreference(callUid, ownerUid, prefsUpdate);
+        updatePreference(securityContxt, `group/${uid}`, prefsUpdate);
       });
     }
     res.status(200).end();

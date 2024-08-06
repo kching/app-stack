@@ -1,5 +1,6 @@
 import { platformPrisma as prisma } from './prisma';
 import { ResourceLike, ResourcePath } from './resources';
+import { config } from './config';
 
 export enum Permissions {
   CREATE = 0x01,
@@ -7,6 +8,7 @@ export enum Permissions {
   UPDATE = 0x04,
   DELETE = 0x08,
   EXECUTE = 0x10,
+  ALL = CREATE | READ | UPDATE | DELETE | EXECUTE,
 }
 
 class PolicyNode {
@@ -41,7 +43,7 @@ class PolicyNode {
       childNode._permissions |= permission;
     }
   }
-  matches(resourcePath: ResourcePath, resource: ResourceLike) {
+  matches(resourcePath: ResourcePath, resource?: ResourceLike) {
     if (this._resourcePath.type === resourcePath.type) {
       if (this._resourcePath.isWildcard) {
         return true;
@@ -49,7 +51,7 @@ class PolicyNode {
       if (this._resourcePath.uid != null && this._resourcePath.uid === resourcePath.uid) {
         return true;
       }
-      if (this._resourcePath.filter) {
+      if (this._resourcePath.filter && resource) {
         const [attributeName, value] = this._resourcePath.filter;
         return resource[attributeName] === value;
       }
@@ -124,18 +126,40 @@ export class SecurityContext {
     return policies;
   }
 
-  async hasPermissions(resourceType: string, resource: ResourceLike, permissions: number) {
-    const resourcePath = new ResourcePath(`${resourceType}/${resource.uid}`);
-    const typeNode = (await this.policies).find((policyNode) => policyNode.matches(resourcePath, resource));
-    let allowedPermissions = 0;
-    if (typeNode) {
-      allowedPermissions = typeNode.permissions;
-      typeNode.children.forEach((policyNode) => {
-        if (policyNode.matches(resourcePath, resource)) {
-          allowedPermissions |= policyNode.permissions;
-        }
-      });
+  async hasPermissions(permissions: number, resource: ResourceLike | ResourcePath | string) {
+    if (this.principalUid === config.auth.rootUser) {
+      return true;
     }
-    return (allowedPermissions & permissions) > 0;
+    let resourcePath: ResourcePath;
+    if (typeof resource === 'string') {
+      resourcePath = new ResourcePath(resource);
+    }
+    if (resource instanceof ResourcePath) {
+      resourcePath = resource;
+      const typeNode = (await this.policies).find((policyNode) => policyNode.matches(resourcePath));
+      if (typeNode) {
+        let allowedPermissions = typeNode.permissions;
+        typeNode.children.forEach((policyNode) => {
+          if (policyNode.matches(resourcePath)) {
+            allowedPermissions |= policyNode.permissions;
+          }
+        });
+        return (allowedPermissions & permissions) > 0;
+      }
+    } else {
+      const resourceLike = resource as ResourceLike;
+      const resourcePath = new ResourcePath(`${resourceLike.resourceType}/${resourceLike.uid}`);
+      const typeNode = (await this.policies).find((policyNode) => policyNode.matches(resourcePath, resourceLike));
+      let allowedPermissions = 0;
+      if (typeNode) {
+        allowedPermissions = typeNode.permissions;
+        typeNode.children.forEach((policyNode) => {
+          if (policyNode.matches(resourcePath, resourceLike)) {
+            allowedPermissions |= policyNode.permissions;
+          }
+        });
+        return (allowedPermissions & permissions) > 0;
+      }
+    }
   }
 }

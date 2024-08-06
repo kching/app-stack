@@ -51,16 +51,6 @@ model UserGroup {
   @@unique([userId, groupId])
 }
 
-model Permission {
-  id        Int    @id @default(autoincrement())
-  uid       String @unique @default(cuid())
-  principal String // either user:<cuid> or group:<cuid>
-  resource  String // <resourceType>/<cuid> | *
-  flags     Int // bitmast of execute|delete|update|create|read
-
-  @@unique([principal, resource], name: "searchBy")
-}
-
 model SecurityPolicy {
   id          Int    @id @default(autoincrement())
   uid         String @unique @default(cuid())

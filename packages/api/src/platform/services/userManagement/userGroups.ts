@@ -3,11 +3,12 @@ import { getLogger } from '../../logger';
 import { config } from '../../config';
 import bcrypt from 'bcryptjs';
 import { Service } from '../../plugin';
-import { findAuthByScheme } from './auth';
-import { assignPermission, Flags, hasPermission } from './permissions';
+import { findAuthByScheme, UserContext } from './auth';
 import { AccessDeniedError } from '../../errors';
 import * as runtime from '../../../../prisma/generated/platformClient/runtime/library';
 import { publish } from '../../events';
+import { Permissions, SecurityContext } from '../../accessControl';
+import { assignPermission } from './permissions';
 
 type Action = 'CREATE' | 'UPDATE' | 'DELETE';
 type UserProfileUpdate = {
@@ -30,9 +31,9 @@ type UserGroupUpdate = {
   };
 };
 
-export const findUserByUid = async (callerUid: string, uid: string, enabledUsersOnly = true) => {
-  const flags = enabledUsersOnly ? Flags.READ : Flags.READ | Flags.UPDATE;
-  const allowed = await hasPermission(callerUid, 'user/*', flags);
+export const findUserByUid = async (securityContext: SecurityContext, uid: string, enabledUsersOnly = true) => {
+  const requiredPermissions = enabledUsersOnly ? Permissions.READ : Permissions.READ | Permissions.UPDATE;
+  const allowed = await securityContext.hasPermissions(requiredPermissions, 'user/*');
   if (allowed) {
     if (enabledUsersOnly) {
       return prisma.user.findUnique({
@@ -44,14 +45,13 @@ export const findUserByUid = async (callerUid: string, uid: string, enabledUsers
       });
     }
   } else {
-    throw new AccessDeniedError(callerUid, 'user/*', flags);
+    throw new AccessDeniedError(securityContext, 'user/*', requiredPermissions);
   }
 };
 
-export const findAllUsers = async (callerId: string, enabledUsersOnly = true) => {
-  const flags = enabledUsersOnly ? Flags.READ : Flags.READ | Flags.UPDATE;
-  const allowed = await hasPermission(callerId, 'user/*', flags);
-
+export const findAllUsers = async (securityContext: SecurityContext, enabledUsersOnly = true) => {
+  const requiredPermissions = enabledUsersOnly ? Permissions.READ : Permissions.READ | Permissions.UPDATE;
+  const allowed = await securityContext.hasPermissions(requiredPermissions, 'user/*');
   if (allowed) {
     if (enabledUsersOnly) {
       return prisma.user.findMany({
@@ -61,13 +61,19 @@ export const findAllUsers = async (callerId: string, enabledUsersOnly = true) =>
       return prisma.user.findMany({});
     }
   } else {
-    throw new AccessDeniedError(callerId, 'user/*', flags);
+    throw new AccessDeniedError(securityContext, 'user/*', requiredPermissions);
   }
 };
 
-export const createUser = async (createdByUid: string, scheme: string, username: string, secret: string) => {
-  const allowed = await hasPermission(createdByUid, 'user/*', Flags.CREATE);
-  if (allowed) {
+export const createUser = async (
+  securityContext: SecurityContext,
+  scheme: string,
+  username: string,
+  secret: string
+) => {
+  const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
+  const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
+  if (createUserAllowed && assignPermissionsAllowed) {
     return prisma.$transaction(async (tx) => {
       const exists = await tx.authScheme.findFirst({
         include: {
@@ -88,21 +94,21 @@ export const createUser = async (createdByUid: string, scheme: string, username:
                 secret,
               },
             },
-            createdByUid,
+            createdByUid: securityContext.principalUid,
           },
         });
-        await assignPermission(config.auth.rootUser, `user/${user.uid}`, Flags.READ | Flags.UPDATE, `user/${user.uid}`);
         await assignPermission(
-          config.auth.rootUser,
+          securityContext,
           `user/${user.uid}`,
-          Flags.CREATE | Flags.READ | Flags.UPDATE,
-          `contact/userUid=${user.uid}`
+          `user/${user.uid}`,
+          Permissions.READ | Permissions.UPDATE
         );
+        await assignPermission(securityContext, `user/${user.uid}`, `contact/[userUid=${user.uid}]`, Permissions.ALL);
         await assignPermission(
-          config.auth.rootUser,
+          securityContext,
           `user/${user.uid}`,
-          Flags.CREATE | Flags.READ | Flags.UPDATE,
-          `preference/ownerUid=user:${user.uid}`
+          `preference/[ownerUid=user:${user.uid}]`,
+          Permissions.ALL
         );
         publish('resource.user', { status: 'CREATED', resource: user.uid });
         return user;
@@ -111,16 +117,19 @@ export const createUser = async (createdByUid: string, scheme: string, username:
       }
     });
   } else {
-    throw new AccessDeniedError(createdByUid, 'user/*', Flags.CREATE);
+    if (!createUserAllowed) throw new AccessDeniedError(securityContext, 'user/*', Permissions.CREATE);
+    if (!assignPermissionsAllowed)
+      throw new AccessDeniedError(securityContext, 'securityPolicy/*', Permissions.CREATE | Permissions.UPDATE);
   }
 };
+
 export const updateUser = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   userUid: string,
   { displayName, enabled, contacts }: UserProfileUpdate
 ) => {
   const resourceId = `users/${userUid}`;
-  const allowed = await hasPermission(callerUid, resourceId, Flags.UPDATE);
+  const allowed = await securityContext.hasPermissions(Permissions.UPDATE, resourceId);
   if (allowed) {
     return prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
@@ -173,16 +182,16 @@ export const updateUser = async (
       }
     });
   } else {
-    throw new AccessDeniedError(callerUid, resourceId, Flags.UPDATE);
+    throw new AccessDeniedError(securityContext, resourceId, Permissions.UPDATE);
   }
 };
 
 export const findGroupByUid = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   groupUid: string,
   tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma
 ) => {
-  const allowed = await hasPermission(callerUid, `group/${groupUid}`, Flags.READ);
+  const allowed = await securityContext.hasPermissions(Permissions.READ, 'group/*');
   if (allowed) {
     const group = await tx.group.findUnique({ where: { uid: groupUid } });
     if (group) {
@@ -203,12 +212,15 @@ export const findGroupByUid = async (
       return null;
     }
   } else {
-    throw new AccessDeniedError(callerUid, `group/${groupUid}`, Flags.READ);
+    throw new AccessDeniedError(securityContext, `group/${groupUid}`, Permissions.READ);
   }
 };
 
-export const findAllGroups = async (callerId: string, tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma) => {
-  const allowed = await hasPermission(callerId, 'group/*', Flags.READ);
+export const findAllGroups = async (
+  securityContext: SecurityContext,
+  tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma
+) => {
+  const allowed = await securityContext.hasPermissions(Permissions.READ, 'group/*');
   if (allowed) {
     const groups = await tx.group.findMany({});
     return Promise.all(
@@ -227,34 +239,34 @@ export const findAllGroups = async (callerId: string, tx: Omit<typeof prisma, ru
       })
     );
   } else {
-    throw new AccessDeniedError(callerId, 'group/*', Flags.READ);
+    throw new AccessDeniedError(securityContext, 'group/*', Permissions.READ);
   }
 };
 
 export const createUserGroup = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   label: string,
   description = '',
   tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma
 ) => {
   const resourceId = 'group/*';
-  const allowed = await hasPermission(callerUid, resourceId, Flags.CREATE);
+  const allowed = await securityContext.hasPermissions(Permissions.CREATE, 'group/*');
   if (allowed) {
     const group = await tx.group.create({
       data: {
         label,
         description,
-        createdByUid: callerUid,
+        createdByUid: securityContext.principalUid,
       },
     });
     publish('resource.group', { status: 'CREATED', resourceId: group.uid });
   } else {
-    throw new AccessDeniedError(callerUid, resourceId, Flags.CREATE);
+    throw new AccessDeniedError(securityContext, resourceId, Permissions.CREATE);
   }
 };
 
 export const updateUserGroup = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   groupUid: string,
   attributes: {
     label?: string;
@@ -263,7 +275,7 @@ export const updateUserGroup = async (
   tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma
 ) => {
   const resourceId = `group/${groupUid}`;
-  const allowed = await hasPermission(callerUid, resourceId, Flags.UPDATE);
+  const allowed = await securityContext.hasPermissions(Permissions.UPDATE, resourceId);
   if (allowed) {
     const { label, description } = attributes;
     const group = await tx.group.findUnique({
@@ -281,17 +293,17 @@ export const updateUserGroup = async (
     }
     return group;
   } else {
-    throw new AccessDeniedError(callerUid, resourceId, Flags.UPDATE);
+    throw new AccessDeniedError(securityContext, resourceId, Permissions.UPDATE);
   }
 };
 
 export const deleteUserGroup = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   groupUid: string,
   tx: Omit<typeof prisma, runtime.ITXClientDenyList> = prisma
 ) => {
   const resourceId = `group/${groupUid}`;
-  const allowed = await hasPermission(callerUid, resourceId, Flags.DELETE);
+  const allowed = await securityContext.hasPermissions(Permissions.DELETE, resourceId);
   if (allowed) {
     const group = await tx.group.delete({
       where: { uid: groupUid },
@@ -299,20 +311,20 @@ export const deleteUserGroup = async (
     publish('resource.group', { status: 'DELETED', resourceId: groupUid });
     return group;
   } else {
-    throw new AccessDeniedError(callerUid, resourceId, Flags.DELETE);
+    throw new AccessDeniedError(securityContext, resourceId, Permissions.DELETE);
   }
 };
 
 export const updateGroupMembership = async (
-  callerUid: string,
+  securityContext: SecurityContext,
   groupUid: string,
   memberUpdates: { action: Action; userUid: string }[]
 ) => {
   const resourceId = `group/${groupUid}`;
-  const allowed = await hasPermission(callerUid, resourceId, Flags.UPDATE);
+  const allowed = await securityContext.hasPermissions(Permissions.UPDATE, resourceId);
   if (allowed) {
     return prisma.$transaction(async (tx) => {
-      const group = await findGroupByUid(callerUid, groupUid);
+      const group = await findGroupByUid(securityContext, groupUid);
       if (!group) {
         getLogger('userGroups').error(`addUserToGroup(): Group/${groupUid} not found`);
         throw new Error(`Group/${groupUid} not found`);
@@ -335,7 +347,7 @@ export const updateGroupMembership = async (
                     create: {
                       userId: user.id,
                       groupId: group.id,
-                      createdByUId: callerUid,
+                      createdByUId: securityContext.principalUid,
                     },
                     update: {
                       userId: user.id,
@@ -374,7 +386,7 @@ export const updateGroupMembership = async (
       publish('resource.group', { status: 'UPDATED', resourceId: group.uid });
     });
   } else {
-    throw new AccessDeniedError(callerUid, resourceId, Flags.DELETE);
+    throw new AccessDeniedError(securityContext, resourceId, Permissions.DELETE);
   }
 };
 
@@ -405,12 +417,18 @@ const createAnonymousUserIfMissing = async (anonymousUID: string, createdByUid: 
 
 export async function init(this: Service) {
   this.setId('platform/userGroups');
+  const rootSecurityContext = new SecurityContext(config.auth.rootUser);
 
   this.useEndpoint('get', '/users', async (req, res) => {
-    const { uid } = req.user as { uid: string };
+    const securityContext = (req.user as UserContext).securityContext;
+
     try {
-      const users = await findAllUsers(uid);
-      res.status(200).json(users);
+      if (securityContext) {
+        const users = await findAllUsers(securityContext);
+        res.status(200).json(users);
+      } else {
+        res.status(401).end();
+      }
     } catch (error) {
       if (error instanceof AccessDeniedError) {
         res.status(401).json({ message: error.message });
@@ -421,20 +439,24 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('post', '/users', async (req, res) => {
-    const user = req.user as { uid: string };
-    if (user) {
+    const securityContext = (req.user as UserContext)?.securityContext;
+    if (securityContext) {
       const { username, secret, emailAddress } = req.body;
       try {
-        const userRecord = await createUser(user.uid, username, secret, emailAddress);
-        const contact = await prisma.contact.create({
-          data: {
-            userId: userRecord.id,
-            userUid: userRecord.uid,
-            channel: 'email',
-            address: emailAddress,
-          },
-        });
-        res.status(200).json({ ...userRecord, contacts: [contact] });
+        const userRecord = await createUser(securityContext, username, secret, emailAddress);
+        if (userRecord) {
+          const contact = await prisma.contact.create({
+            data: {
+              userId: userRecord.id,
+              userUid: userRecord.uid,
+              channel: 'email',
+              address: emailAddress,
+            },
+          });
+          res.status(200).json({ ...userRecord, contacts: [contact] });
+        } else {
+          res.status(500).end();
+        }
       } catch (error) {
         if (error instanceof AccessDeniedError) {
           res.status(401).json({ message: error.message });
@@ -446,10 +468,11 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('patch', '/users/:uid', async (req, res) => {
-    const callerUid = (req.user as { uid: string })?.uid;
+    const securityContext = (req.user as UserContext)?.securityContext;
+
     const { uid } = req.params;
     try {
-      const user = await updateUser(callerUid, uid, req.body);
+      const user = await updateUser(securityContext, uid, req.body);
       res.status(200).json(user);
     } catch (error) {
       if (error instanceof AccessDeniedError) {
@@ -461,9 +484,9 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('post', '/groups', async (req, res) => {
-    const { uid } = req.user as { uid: string };
+    const securityContext = (req.user as UserContext)?.securityContext;
     try {
-      const group = await createUserGroup(uid, req.body);
+      const group = await createUserGroup(securityContext, req.body);
       res.status(200).json(group);
     } catch (error) {
       if (error instanceof AccessDeniedError) {
@@ -475,9 +498,9 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('get', '/groups', async (req, res) => {
-    const { uid } = req.user as { uid: string };
+    const securityContext = (req.user as UserContext)?.securityContext;
     try {
-      const groups = await findAllGroups(uid);
+      const groups = await findAllGroups(securityContext);
       res.status(200).json(groups);
     } catch (error) {
       if (error instanceof AccessDeniedError) {
@@ -489,10 +512,10 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('get', '/groups/:uid', async (req, res) => {
-    const callerId = (req.user as { uid: string })?.uid;
+    const securityContext = (req.user as UserContext)?.securityContext;
     const { uid } = req.params;
     try {
-      const group = await findGroupByUid(callerId, uid);
+      const group = await findGroupByUid(securityContext, uid);
       res.status(200).json(group);
     } catch (error) {
       if (error instanceof AccessDeniedError) {
@@ -504,14 +527,14 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('patch', '/groups/:uid', async (req, res) => {
-    const callerId = (req.user as { uid: string })?.uid;
+    const securityContext = (req.user as UserContext)?.securityContext;
     const { uid } = req.params;
     const { label, description, members } = req.body as UserGroupUpdate;
     try {
       const group = prisma.$transaction(async (tx) => {
-        const group = await updateUserGroup(callerId, uid, { label, description }, tx);
+        const group = await updateUserGroup(securityContext, uid, { label, description }, tx);
         if (Array.isArray(members)) {
-          await updateGroupMembership(callerId, uid, members);
+          await updateGroupMembership(securityContext, uid, members);
         }
         return group;
       });
@@ -526,10 +549,10 @@ export async function init(this: Service) {
   });
 
   this.useEndpoint('delete', '/groups:/uid', async (req, res) => {
-    const callerId = (req.user as { uid: string })?.uid;
+    const securityContext = (req.user as UserContext)?.securityContext;
     const { uid } = req.params;
     try {
-      const group = await deleteUserGroup(callerId, uid);
+      const group = await deleteUserGroup(securityContext, uid);
       res.status(200).json(group);
     } catch (error) {
       if (error instanceof AccessDeniedError) {
@@ -563,7 +586,7 @@ export async function init(this: Service) {
             let authScheme = await findAuthByScheme('local', username);
             if (authScheme == null) {
               const hashedPassword = await bcrypt.hash(secret, 12);
-              return createUser(rootUser.uid, 'local', username, hashedPassword);
+              return createUser(rootSecurityContext, 'local', username, hashedPassword);
             } else {
               return authScheme.user;
             }
@@ -572,7 +595,7 @@ export async function init(this: Service) {
       );
 
       await updateGroupMembership(
-        rootUser.uid,
+        rootSecurityContext,
         adminGroup.uid,
         adminUsers.map((adminUser) => ({
           action: 'CREATE' as Action,

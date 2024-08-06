@@ -12,6 +12,12 @@ import { publish } from '../../events';
 import { getLogger } from '../../logger';
 import fs from 'fs';
 import { randomBytes } from 'node:crypto';
+import { SecurityContext } from '../../accessControl';
+
+export type UserContext = {
+  userUid: string;
+  securityContext: SecurityContext;
+};
 
 type CookieRequest = { cookies: { [key: string]: string } };
 
@@ -58,7 +64,15 @@ export const jwt = () => {
           uid: jwtPayload.sub as string,
         },
       });
-      done(null, user);
+      if (user) {
+        const securityContext = new SecurityContext(user.uid);
+        return {
+          userUid: user.uid,
+          securityContext,
+        };
+      } else {
+        done(null, null);
+      }
     } catch (error) {
       done(error, null);
     }
@@ -112,6 +126,7 @@ const createRefreshToken = async (user: User) => {
 
 export async function init(this: Service) {
   this.setId('platform/auth');
+  const rootSecurityContext = new SecurityContext(config.auth.rootUser);
   this.useEndpoint('post', '/login', async (req, res) => {
     let refreshToken = req.cookies['refresh-token'];
     let user: User | null = null;
@@ -120,7 +135,7 @@ export async function init(this: Service) {
         audience: config.app.domain,
         clockTolerance: 6000,
       });
-      user = await findUserByUid(config.auth.rootUser, payload.sub as string);
+      user = await findUserByUid(rootSecurityContext, payload.sub as string);
     } else if (req.body) {
       const { username, password } = req.body;
       if (username && username.trim().length > 0 && password && password.trim().length > 0) {

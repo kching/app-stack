@@ -3,157 +3,136 @@ import { Service } from '../../plugin';
 import { config } from '../../config';
 import { AccessDeniedError } from '../../errors';
 import { publish } from '../../events';
+import { Permissions, SecurityContext } from '../../accessControl';
+import { ResourcePath } from '../../resources';
+import { UserContext } from './auth';
 
 type Action = 'CREATE' | 'DELETE';
 
 type PermissionUpdate = {
   action: Action;
   resource: string;
-  flags: number;
+  permissions: number;
 };
 
-export enum Flags {
-  READ = 0x01,
-  CREATE = 0x02,
-  UPDATE = 0x04,
-  DELETE = 0x08,
-  EXECUTE = 0x10,
-  ALL = READ | CREATE | UPDATE | DELETE | EXECUTE,
-}
-
-export const assignPermission = async (callerUid: string, principal: string, flags: number, resource: string) => {
-  const allowed = await hasPermission(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
+export const assignPermission = async (
+  securityContext: SecurityContext,
+  principal: string,
+  resource: string,
+  permissions: number
+) => {
+  const allowed = await securityContext.hasPermissions(
+    Permissions.CREATE | Permissions.UPDATE,
+    new ResourcePath(`securityPolicy/[resource="${resource}"]`)
+  );
   if (allowed) {
-    let permission = await prisma.permission.findUnique({
+    let policy = await prisma.securityPolicy.findUnique({
       where: {
-        searchBy: { principal, resource },
+        principal_resource: { principal, resource },
       },
     });
-    if (permission) {
-      flags &= permission.flags;
+    if (policy) {
+      permissions &= policy.permissions;
     }
-    permission = await prisma.permission.upsert({
+    policy = await prisma.securityPolicy.upsert({
       where: {
-        searchBy: {
-          principal: principal,
+        principal_resource: {
+          principal,
           resource,
         },
       },
       create: {
         principal: principal,
         resource,
-        flags: flags,
+        permissions,
       },
       update: {
-        flags: flags,
+        permissions,
       },
     });
-    publish('resource.permission', { status: 'UPDATED', resourceId: permission.uid });
-    return permission;
+    publish('resource.securityPolicy', { status: 'UPDATED', resourceId: policy.uid });
+    return policy;
   } else {
-    throw new AccessDeniedError(callerUid, `permission/resource=${resource}`, Flags.CREATE | Flags.UPDATE);
+    throw new AccessDeniedError(
+      securityContext,
+      `securityPolicy/resource=${resource}`,
+      Permissions.CREATE | Permissions.UPDATE
+    );
   }
 };
 
-export const clearPermission = async (callerUid: string, principal: string, flags: number, resource: string) => {
-  const allowed = await hasPermission(
-    callerUid,
-    `permission/resource=${resource}`,
-    Flags.CREATE | Flags.UPDATE | Flags.DELETE
+export const clearPermission = async (
+  securityContext: SecurityContext,
+  principal: string,
+  resource: string,
+  permissions: number
+) => {
+  const allowed = await securityContext.hasPermissions(
+    Permissions.DELETE | Permissions.UPDATE,
+    new ResourcePath(`securityPolicy/[resource="${resource}"]`)
   );
   if (allowed) {
-    let permission = await prisma.permission.findUnique({
+    let policy = await prisma.securityPolicy.findUnique({
       where: {
-        searchBy: { principal, resource },
+        principal_resource: { principal, resource },
       },
     });
-    if (permission) {
-      const newflags = permission.flags & ~flags;
-      if (newflags === 0) {
-        permission = await prisma.permission.delete({
+    if (policy) {
+      permissions = policy.permissions & ~permissions;
+      if (permissions === 0) {
+        await prisma.securityPolicy.delete({
           where: {
-            searchBy: { principal, resource },
+            principal_resource: { principal, resource },
           },
         });
-        publish('resource.permission', { status: 'DELETED', resourceId: permission.uid });
       } else {
-        permission = await prisma.permission.update({
+        await prisma.securityPolicy.update({
           where: {
-            searchBy: { principal, resource },
+            principal_resource: { principal, resource },
           },
           data: {
-            flags: flags,
+            permissions,
           },
         });
-        publish('resource.permission', { status: 'UPDATED', resourceId: permission.uid });
       }
-      return permission;
+      publish('resource.permission', { status: 'DELETED', resourceId: policy.uid });
     }
   } else {
-    throw new AccessDeniedError(callerUid, resource, Flags.DELETE);
-  }
-};
-
-export const hasPermission = async (principal: string, resource: string, flags: number) => {
-  if (principal === config.auth.rootUser) {
-    return true;
-  }
-
-  const [resourceType, resourcePath] = resource.split('/');
-  const wildcardPermission = await prisma.permission.findUnique({
-    where: {
-      searchBy: { principal, resource: `${resourceType}/*` },
-    },
-  });
-
-  if (resourcePath.indexOf('=') > -1) {
-    const [attribute, value] = resourcePath.split('=');
-    const directPermission = await prisma.permission.findFirst({
-      where: {
-        principal,
-        resource,
-        [attribute]: value,
-      },
-    });
-    const principalPermission =
-      (directPermission ? directPermission.flags : 0) | (wildcardPermission ? wildcardPermission.flags : 0);
-    return (flags & principalPermission) > 0;
-  } else {
-    const directPermission = await prisma.permission.findUnique({
-      where: {
-        searchBy: { principal, resource },
-      },
-    });
-    const principalPermission =
-      (directPermission ? directPermission.flags : 0) | (wildcardPermission ? wildcardPermission.flags : 0);
-    return (flags & principalPermission) > 0;
+    throw new AccessDeniedError(securityContext, resource, Permissions.DELETE | Permissions.UPDATE);
   }
 };
 
 export async function init(this: Service) {
-  this.useEndpoint('put', '/users/:uid/permissions', (req, res) => {
-    const callerUid = (req.user as { uid: string }).uid;
-    const { uid } = req.params;
-    const principal = `user:${uid}`;
+  this.useEndpoint('put', '/users/:userUid/permissions', async (req, res) => {
+    const { userUid } = req.params;
+    const securityContext = (req.user as UserContext).securityContext;
 
-    if (Array.isArray(req.body)) {
-      req.body.map(({ action, resource, flags }: PermissionUpdate) => {
-        switch (action) {
-          case 'CREATE':
-            return assignPermission(callerUid, principal, flags, resource);
-          case 'DELETE':
-            return clearPermission(callerUid, principal, flags, resource);
-        }
-      });
+    try {
+      if (Array.isArray(req.body)) {
+        await Promise.all(
+          req.body.map(({ action, resource, permissions }: PermissionUpdate) => {
+            switch (action) {
+              case 'CREATE':
+                return assignPermission(securityContext, userUid, resource, permissions);
+              case 'DELETE':
+                return clearPermission(securityContext, userUid, resource, permissions);
+            }
+          })
+        );
+        res.status(200).end();
+      }
+    } catch (error) {
+      res.status(401).end();
     }
   });
 
   this.onStart(async () => {
     if (config.auth.rootUser && config.auth.adminGroupUid) {
-      const principal = `group:${config.auth.adminGroupUid}`;
-      await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'user/*');
-      await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'group/*');
-      await assignPermission(config.auth.rootUser, principal, Flags.ALL, 'permission/*');
+      const principal = `group/${config.auth.adminGroupUid}`;
+      const securityContext = new SecurityContext(config.auth.rootUser);
+      await assignPermission(securityContext, principal, 'user/*', Permissions.ALL);
+      await assignPermission(securityContext, principal, 'group/*', Permissions.ALL);
+      await assignPermission(securityContext, principal, 'securityPolicy/*', Permissions.ALL);
     }
   });
 }
