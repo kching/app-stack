@@ -1,6 +1,7 @@
 import path from 'path';
 import dotenv from 'dotenv';
 import { readYaml } from './fileUtils';
+import { merge } from 'lodash';
 
 const dotEnvConfig = dotenv.config();
 const paths = ['default.yaml'];
@@ -13,8 +14,8 @@ export type Config = {
     domain: string;
     port: number;
     apiRoot: string;
-    staticRoot: string;
     templateRoot: string;
+    proxy?: string;
     extensionFilePattern: string;
     extensionRoots: string[];
   };
@@ -45,7 +46,7 @@ export const loadConfig = <T>(...configPaths: string[]): T => {
     .map((configPath: string) => path.join(process.cwd(), 'config', configPath))
     .map((configPath) => readYaml(configPath))
     .filter((config) => config !== null);
-  return Object.assign({}, ...configs, { env: dotEnvConfig.parsed });
+  return merge({}, ...configs, { env: dotEnvConfig.parsed });
 };
 
 export const config = loadConfig<Config>(...paths);

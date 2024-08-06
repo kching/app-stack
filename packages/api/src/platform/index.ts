@@ -51,7 +51,6 @@ const platformResourceResolver = new PrismaResourceResolver(platformPrisma as un
 export class Platform {
   private _plugins: { [id: string]: Plugin } = {};
   private _apiRoot = config.app.apiRoot;
-  private _staticRoot = config.app.staticRoot;
   private _extensionRoots: string[] = config.app.extensionRoots;
   private _onShutdown?: () => Promise<void> | void;
 
@@ -59,11 +58,6 @@ export class Platform {
 
   apiRoot(root: string): Platform {
     this._apiRoot = root;
-    return this;
-  }
-
-  staticRoot(root: string): Platform {
-    this._staticRoot = root;
     return this;
   }
 
@@ -113,7 +107,6 @@ export class Platform {
 
     app.use(json());
     app.use(cookieParser());
-    app.use(staticResource(this._staticRoot));
     app.use(this._apiRoot, router);
     httpServer.listen(resolvedPort, () => {
       getLogger().info(`App server running on port ${resolvedPort}`);

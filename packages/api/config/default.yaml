@@ -2,7 +2,6 @@ app:
   domain: 'app.example.org'
   port: 3000
   apiRoot: '/api'
-  staticRoot: 'public'
   templateRoot: 'src/templates'
   extensionFilePattern: '*.ts'
   extensionRoots:
