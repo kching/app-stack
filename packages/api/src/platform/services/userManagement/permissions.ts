@@ -103,6 +103,7 @@ export const clearPermission = async (
 };
 
 export async function init(this: Service) {
+  this.setId('platform/permissions');
   this.useEndpoint('put', '/users/:userUid/permissions', async (req, res) => {
     const { userUid } = req.params;
     const securityContext = (req.user as UserContext).securityContext;
@@ -135,4 +136,5 @@ export async function init(this: Service) {
       await assignPermission(securityContext, principal, 'securityPolicy/*', Permissions.ALL);
     }
   });
+  return ['platform/userGroups'];
 }

@@ -264,5 +264,4 @@ export async function init(this: Service) {
       }
     }
   });
-  return ['platform/userGroups'];
 }

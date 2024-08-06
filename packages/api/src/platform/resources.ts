@@ -8,9 +8,9 @@ export type ResourceLike = {
 
 export class Resource {
   private readonly _type: string;
-  private readonly _value: ResourceLike;
+  private readonly _value: any;
 
-  constructor(type: string, value: ResourceLike) {
+  constructor(type: string, value: any) {
     this._type = type;
     this._value = value;
   }
