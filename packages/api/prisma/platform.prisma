@@ -61,6 +61,16 @@ model Permission {
   @@unique([principal, resource], name: "searchBy")
 }
 
+model SecurityPolicy {
+  id          Int    @id @default(autoincrement())
+  uid         String @unique @default(cuid())
+  principal   String // either user:<cuid> or group:<cuid>
+  resource    String // <resourceType>/<cuid> | *
+  permissions Int
+
+  @@unique([principal, resource])
+}
+
 model Contact {
   id               Int            @id @default(autoincrement())
   userId           Int

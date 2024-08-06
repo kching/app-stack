@@ -4,4 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   silent: false,
   clearMocks: true,
+  collectCoverage: true,
+  coverageReporters: ['json', 'html'],
+  collectCoverageFrom: ['src/**/*.ts', '!**/node_modules/**'],
 };

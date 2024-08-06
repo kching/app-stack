@@ -73,6 +73,9 @@ export class ResourcePath {
   get filter() {
     return this._filter;
   }
+  get isWildcard() {
+    return this.uid === '*';
+  }
 }
 
 export interface ResourceResolver {
