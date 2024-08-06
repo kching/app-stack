@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3030",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint -p 3030"
   },
   "dependencies": {
     "react": "^18",
