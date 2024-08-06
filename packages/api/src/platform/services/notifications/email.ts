@@ -9,9 +9,8 @@ export class SendGridProvider extends NotificationProvider {
   private readonly subjects = readYaml(`${config.app.templateRoot}/email/subjects.yaml`);
   private readonly emailTemplates: { [event: string]: { [contentType: string]: compileTemplate } } = {};
 
-  constructor(templateRoot: string) {
+  constructor(apiKey: string, templateRoot: string = config.app.templateRoot) {
     super();
-    const apiKey = config.env['SENDGRID_API_KEY'] as unknown as string;
     sendGridMail.setApiKey(apiKey);
     scanForFiles(templateRoot, (file) => file.name.endsWith('.pug')).then((filePaths) => {
       filePaths.map((filePath) => this.loadTemplate(filePath));

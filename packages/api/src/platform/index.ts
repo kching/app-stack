@@ -12,6 +12,7 @@ import { createWebSocketServer } from './webSockets';
 import { ChainedResourceResolver, PrismaResourceResolver, ResourceResolver } from './resources';
 import { platformPrisma } from './prisma';
 import { PrismaClient } from '@prisma/client';
+import notifications, { NotificationProvider } from './services/notifications';
 
 const app = express();
 const httpServer = createServer(app);
@@ -72,7 +73,14 @@ export class Platform {
   }
 
   resourceResolvers(...resourceResolvers: ResourceResolver[]): Platform {
-    this._resourceResolver = new ChainedResourceResolver(...resourceResolvers, platformResourceResolver);
+    if (resourceResolvers && resourceResolvers.length > 0) {
+      this._resourceResolver = new ChainedResourceResolver(...resourceResolvers, platformResourceResolver);
+    }
+    return this;
+  }
+
+  withNotificationProvider(channel: string, provider: NotificationProvider) {
+    notifications.use(channel, provider);
     return this;
   }
 
