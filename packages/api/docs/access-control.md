@@ -14,7 +14,7 @@ CREATE and READ permissions would be of binary value `11000b` or `0x18` in HEX.
 
 Resources 
 ---
-A resource is a data object with a type and uniquely identifiable by the attribute `Uid`. They can be
+A resource is a data object with a type and uniquely identifiable by the attribute `uid`. They can be
 referenced by a `resource path` with the format `{type}/{uid}`. For example;
 
 ```
