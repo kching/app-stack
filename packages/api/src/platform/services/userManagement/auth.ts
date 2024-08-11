@@ -38,7 +38,7 @@ const getJwtSecret = () => {
 
 const fromCookieAsToken = (req: CookieRequest) => {
   if (req && req.cookies) {
-    return req.cookies['access-token'];
+    return req.cookies['next-auth.session-token'];
   } else {
     return null;
   }
@@ -128,15 +128,8 @@ export async function init(this: Service) {
   this.setId('platform/auth');
   const rootSecurityContext = new SecurityContext(config.auth.rootUser);
   this.useEndpoint('post', '/login', async (req, res) => {
-    let refreshToken = req.cookies['refresh-token'];
     let user: User | null = null;
-    if (refreshToken) {
-      const payload = Jwt.verify(refreshToken, getJwtSecret(), {
-        audience: config.app.domain,
-        clockTolerance: 6000,
-      });
-      user = await findUserByUid(rootSecurityContext, payload.sub as string);
-    } else if (req.body) {
+    if (req.body) {
       const { username, password } = req.body;
       if (username && username.trim().length > 0 && password && password.trim().length > 0) {
         const auth = await findAuthByScheme('local', username);
@@ -158,11 +151,7 @@ export async function init(this: Service) {
     }
 
     if (user) {
-      if (!refreshToken) {
-        refreshToken = await createRefreshToken(user);
-      }
       const accessToken = await createAccessToken(user);
-
       res
         .status(200)
         .cookie('access-token', accessToken, {
@@ -170,17 +159,13 @@ export async function init(this: Service) {
           httpOnly: true,
           secure: true,
         })
-        .cookie('refresh-token', refreshToken, {
-          maxAge: config.auth.sessionMaxAgeSeconds * 1000000,
-          httpOnly: true,
-          secure: true,
-        })
         .json({
+          uid: user.uid,
+          displayName: user.displayName,
           accessToken: accessToken,
-          refreshToken: refreshToken,
         });
     } else {
-      res.status(401);
+      res.status(401).end();
     }
   }).withAuthentication(null);
 

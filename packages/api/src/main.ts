@@ -1,7 +1,6 @@
 import platform from './platform';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from './platform/config';
-import * as process from 'node:process';
 import { getLogger } from './platform/logger';
 
 if (config.app.proxy) {

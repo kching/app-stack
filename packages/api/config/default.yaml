@@ -16,8 +16,8 @@ logging:
 
 auth:
   issuer: 'app.example.org'
-  tokenMaxAgeSeconds: 300
-  sessionMaxAgeSeconds: 86400
+  tokenMaxAgeSeconds: 86400
+  sessionMaxAgeSeconds: 2592000
   rootUser: 'root'
   anonymousUser: 'anonymous'
   adminGroupUid: 'admin'

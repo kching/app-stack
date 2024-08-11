@@ -14,5 +14,5 @@ export function init(this: Service) {
       status: 'ok',
       version,
     });
-  }).withAuthentication(null);
+  });
 }
