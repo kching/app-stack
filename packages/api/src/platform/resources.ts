@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { platformPrisma } from './prisma';
 
 export type ResourceLike = {
   resourceType: string;
@@ -88,7 +88,7 @@ export interface ResourceResolver {
 export class PrismaResourceResolver implements ResourceResolver {
   private readonly prisma;
 
-  constructor(prisma: PrismaClient) {
+  constructor(prisma: typeof platformPrisma) {
     this.prisma = prisma;
   }
 
