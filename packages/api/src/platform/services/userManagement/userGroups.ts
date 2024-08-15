@@ -70,6 +70,7 @@ export const createUser = async (
   securityContext: SecurityContext,
   scheme: string,
   username: string,
+  emailAddress: string,
   secret: string
 ) => {
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
@@ -98,17 +99,15 @@ export const createUser = async (
             createdByUid: securityContext.principalUid,
           },
         });
-        if (username.includes('@')) {
-          await tx.contact.create({
-            data: {
-              userId: user.id,
-              ownerUid: user.uid,
-              channel: 'email',
-              address: username,
-              primary: true,
-            },
-          });
-        }
+        await tx.contact.create({
+          data: {
+            userId: user.id,
+            ownerUid: user.uid,
+            channel: 'email',
+            address: emailAddress,
+            primary: true,
+          },
+        });
         return user;
       } else {
         return exists.user;
