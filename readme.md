@@ -11,7 +11,7 @@ created repository. This way you will be able to pull in future changes without 
 ## Repository layout
 The code base consists of two sub-projects in the form of `npm workspace`s:
 * `pacakges/api` - Services and back end logic for your application
-* `packages/ui` - Foundational user interface for you to extend upon
+* `packages/web` - Foundational user interface for you to extend upon
 
 Each package contains a `readme.md` that further discusses the intricacies of the package in greater detail.
 
