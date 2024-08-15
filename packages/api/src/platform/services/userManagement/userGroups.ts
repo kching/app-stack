@@ -79,7 +79,7 @@ export const createUser = async (
   scheme: string,
   username: string,
   secret: string,
-  emailAddress: string
+  emailAddress?: string
 ) => {
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
   const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
