@@ -46,7 +46,7 @@ const startPlugins = async (platform: Platform, roots: string[], options: { [key
   return plugins;
 };
 
-const platformResourceResolver = new PrismaResourceResolver(platformPrisma as unknown as PrismaClient);
+const platformResourceResolver = new PrismaResourceResolver(platformPrisma);
 
 export class Platform {
   private _plugins: { [id: string]: Plugin } = {};

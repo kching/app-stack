@@ -173,8 +173,7 @@ export const notifyContact = async (contactUid: string, eventName: string, data:
 export const subscribeContactToEvent = async (
   securityContext: SecurityContext,
   contactUid: string,
-  eventName: string,
-  channel: string
+  eventName: string
 ) => {
   const contact = await prisma.contact.findUnique({
     where: {
@@ -192,7 +191,7 @@ export const subscribeContactToEvent = async (
           contactId_event_channel: {
             contactId: contact.id,
             event: eventName,
-            channel,
+            channel: contact.channel,
           },
         },
         update: {
@@ -203,7 +202,7 @@ export const subscribeContactToEvent = async (
           ownerUid: contact.ownerUid,
           contactId: contact.id,
           event: eventName,
-          channel: channel,
+          channel: contact.channel,
           enabled: true,
         },
       });

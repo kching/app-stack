@@ -75,7 +75,7 @@ export const createUser = async (
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
   const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
   if (createUserAllowed && assignPermissionsAllowed) {
-    return prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx) => {
       const exists = await tx.authScheme.findFirst({
         include: {
           user: true,
@@ -98,41 +98,50 @@ export const createUser = async (
             createdByUid: securityContext.principalUid,
           },
         });
-        const contact = await tx.contact.create({
-          data: {
-            userId: user.id,
-            ownerUid: user.uid,
-            channel: 'email',
-            address: username,
-            primary: true,
-          },
-        });
-        await subscribeContactToEvent(securityContext, contact.uid, 'forgotPassword', 'email');
-        await assignPermission(
-          securityContext,
-          `user/${user.uid}`,
-          `user/${user.uid}`,
-          Permissions.READ | Permissions.UPDATE
-        );
-        await assignPermission(securityContext, `user/${user.uid}`, `contact/[ownerUid=${user.uid}]`, Permissions.ALL);
-        await assignPermission(
-          securityContext,
-          `user/${user.uid}`,
-          `subscription/[ownerUid=${user.uid}`,
-          Permissions.ALL
-        );
-        await assignPermission(
-          securityContext,
-          `user/${user.uid}`,
-          `preference/[ownerUid=user:${user.uid}]`,
-          Permissions.ALL
-        );
-        publish('resource.user', { status: 'CREATED', resource: user.uid });
+        if (username.includes('@')) {
+          await tx.contact.create({
+            data: {
+              userId: user.id,
+              ownerUid: user.uid,
+              channel: 'email',
+              address: username,
+              primary: true,
+            },
+          });
+        }
         return user;
       } else {
         return exists.user;
       }
     });
+
+    const contact = await prisma.contact.findFirst({
+      where: {
+        ownerUid: user.uid,
+        channel: 'email',
+        primary: true,
+      },
+    });
+    if (contact) {
+      await subscribeContactToEvent(securityContext, contact.uid, 'forgotPassword');
+    }
+
+    await assignPermission(
+      securityContext,
+      `user/${user.uid}`,
+      `user/${user.uid}`,
+      Permissions.READ | Permissions.UPDATE
+    );
+    await assignPermission(securityContext, `user/${user.uid}`, `contact/[ownerUid=${user.uid}]`, Permissions.ALL);
+    await assignPermission(securityContext, `user/${user.uid}`, `subscription/[ownerUid=${user.uid}`, Permissions.ALL);
+    await assignPermission(
+      securityContext,
+      `user/${user.uid}`,
+      `preference/[ownerUid=user:${user.uid}]`,
+      Permissions.ALL
+    );
+    publish('resource.user', { status: 'CREATED', resource: user.uid });
+    return user;
   } else {
     if (!createUserAllowed) throw new AccessDeniedError(securityContext, 'user/*', Permissions.CREATE);
     if (!assignPermissionsAllowed)
@@ -462,15 +471,7 @@ export async function init(this: Service) {
       try {
         const userRecord = await createUser(securityContext, username, secret, emailAddress);
         if (userRecord) {
-          const contact = await prisma.contact.create({
-            data: {
-              userId: userRecord.id,
-              ownerUid: userRecord.uid,
-              channel: 'email',
-              address: emailAddress,
-            },
-          });
-          res.status(200).json({ ...userRecord, contacts: [contact] });
+          res.status(200).json({ ...userRecord });
         } else {
           res.status(500).end();
         }
