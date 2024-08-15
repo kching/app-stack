@@ -4,7 +4,7 @@ import { platformPrisma as prisma } from '../../prisma';
 import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
-import { notifyContact } from '../notifications';
+import { notify, notifyContact } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { findUserByUid } from './userGroups';
@@ -233,20 +233,28 @@ export async function init(this: Service) {
           secret: bcrypt.hashSync(newPassword, 12),
         },
       });
-      const contact = await prisma.contact.findFirst({
-        where: {
-          userId: auth.user.id,
-          passwordRecovery: true,
-        },
-      });
-      if (contact) {
-        await notifyContact(contact.uid, 'forgotPassword', {
+      await notify(auth.user.uid)
+        .event('forgotPassword', {
           username: auth.username,
           password: newPassword,
-        });
-      } else {
-        getLogger('Auth').info(`New password for ${auth.username} is ${newPassword}`);
-      }
+        })
+        .onChannel('email')
+        .send();
+
+      // const contact = await prisma.contact.findFirst({
+      //   where: {
+      //     userId: auth.user.id,
+      //     passwordRecovery: true,
+      //   },
+      // });
+      // if (contact) {
+      //   await notifyContact(contact.uid, 'forgotPassword', {
+      //     username: auth.username,
+      //     password: newPassword,
+      //   });
+      // } else {
+      //   getLogger('Auth').info(`New password for ${auth.username} is ${newPassword}`);
+      // }
     }
   });
 }

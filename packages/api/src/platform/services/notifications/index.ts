@@ -2,6 +2,7 @@ import { config } from '../../config';
 import { platformPrisma as prisma } from '../../prisma';
 import { DateTime } from 'luxon';
 import { schedule } from 'node-cron';
+import { Permissions, SecurityContext } from '../../accessControl';
 
 export abstract class NotificationProvider {
   protected constructor() {}
@@ -167,6 +168,50 @@ export const notifyContact = async (contactUid: string, eventName: string, data:
         await sendFailed(message.id);
       }
     });
+  }
+};
+export const subscribeContactToEvent = async (
+  securityContext: SecurityContext,
+  contactUid: string,
+  eventName: string,
+  channel: string
+) => {
+  const contact = await prisma.contact.findUnique({
+    where: {
+      uid: contactUid,
+    },
+  });
+  if (contact) {
+    const hasPermissions = await securityContext.hasPermissions(
+      Permissions.CREATE | Permissions.UPDATE,
+      `subscriptions/[userId=${contact.userId}`
+    );
+    if (hasPermissions) {
+      await prisma.subscription.upsert({
+        where: {
+          contactId_event_channel: {
+            contactId: contact.id,
+            event: eventName,
+            channel,
+          },
+        },
+        update: {
+          enabled: true,
+        },
+        create: {
+          userId: contact.userId,
+          ownerUid: contact.ownerUid,
+          contactId: contact.id,
+          event: eventName,
+          channel: channel,
+          enabled: true,
+        },
+      });
+    } else {
+      throw new Error('No required permissions for changing user subscriptions');
+    }
+  } else {
+    throw new Error(`No contaact UID=${contactUid} found.`);
   }
 };
 export default notifications;

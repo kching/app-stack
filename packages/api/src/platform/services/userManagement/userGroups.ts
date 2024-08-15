@@ -9,6 +9,7 @@ import * as runtime from '../../../../prisma/generated/platformClient/runtime/li
 import { publish } from '../../events';
 import { Permissions, SecurityContext } from '../../accessControl';
 import { assignPermission } from './permissions';
+import { subscribeContactToEvent } from '../notifications';
 
 type Action = 'CREATE' | 'UPDATE' | 'DELETE';
 type UserProfileUpdate = {
@@ -97,13 +98,29 @@ export const createUser = async (
             createdByUid: securityContext.principalUid,
           },
         });
+        const contact = await tx.contact.create({
+          data: {
+            userId: user.id,
+            ownerUid: user.uid,
+            channel: 'email',
+            address: username,
+            primary: true,
+          },
+        });
+        await subscribeContactToEvent(securityContext, contact.uid, 'forgotPassword', 'email');
         await assignPermission(
           securityContext,
           `user/${user.uid}`,
           `user/${user.uid}`,
           Permissions.READ | Permissions.UPDATE
         );
-        await assignPermission(securityContext, `user/${user.uid}`, `contact/[userUid=${user.uid}]`, Permissions.ALL);
+        await assignPermission(securityContext, `user/${user.uid}`, `contact/[ownerUid=${user.uid}]`, Permissions.ALL);
+        await assignPermission(
+          securityContext,
+          `user/${user.uid}`,
+          `subscription/[ownerUid=${user.uid}`,
+          Permissions.ALL
+        );
         await assignPermission(
           securityContext,
           `user/${user.uid}`,
@@ -149,7 +166,7 @@ export const updateUser = async (
               const contact = await tx.contact.create({
                 data: {
                   userId: user.id,
-                  userUid: user.uid,
+                  ownerUid: user.uid,
                   channel,
                   address,
                 },
@@ -448,7 +465,7 @@ export async function init(this: Service) {
           const contact = await prisma.contact.create({
             data: {
               userId: userRecord.id,
-              userUid: userRecord.uid,
+              ownerUid: userRecord.uid,
               channel: 'email',
               address: emailAddress,
             },
