@@ -32,6 +32,14 @@ type UserGroupUpdate = {
   };
 };
 
+const isEmailAddress : boolean = (address: string) => {
+  if(address == null || address.trim().length <= 1) {
+    return false;
+  }
+  const atIndex = address.indexOf('@');
+  return atIndex > 1 && address.indexOf('@', atIndex) === -1 && address.indexOf('.', atIndex > -1);
+}
+
 export const findUserByUid = async (securityContext: SecurityContext, uid: string, enabledUsersOnly = true) => {
   const requiredPermissions = enabledUsersOnly ? Permissions.READ : Permissions.READ | Permissions.UPDATE;
   const allowed = await securityContext.hasPermissions(requiredPermissions, 'user/*');
@@ -70,8 +78,8 @@ export const createUser = async (
   securityContext: SecurityContext,
   scheme: string,
   username: string,
-  emailAddress: string,
-  secret: string
+  secret: string,
+  emailAddress: string
 ) => {
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
   const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
@@ -99,15 +107,17 @@ export const createUser = async (
             createdByUid: securityContext.principalUid,
           },
         });
-        await tx.contact.create({
-          data: {
-            userId: user.id,
-            ownerUid: user.uid,
-            channel: 'email',
-            address: emailAddress,
-            primary: true,
-          },
-        });
+        if(emailAddress != null) {
+          await tx.contact.create({
+            data: {
+              userId: user.id,
+              ownerUid: user.uid,
+              channel: 'email',
+              address: emailAddress,
+              primary: true,
+            },
+          });
+        }
         return user;
       } else {
         return exists.user;
@@ -603,7 +613,8 @@ export async function init(this: Service) {
             let authScheme = await findAuthByScheme('local', username);
             if (authScheme == null) {
               const hashedPassword = await bcrypt.hash(secret, 12);
-              return createUser(rootSecurityContext, 'local', username, hashedPassword);
+              const emailAddress = isEmailAddress(username) ? username : undefined;
+              return createUser(rootSecurityContext, 'local', username, hashedPassword, emailAddress);
             } else {
               return authScheme.user;
             }
