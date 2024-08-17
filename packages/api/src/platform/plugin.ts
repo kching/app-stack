@@ -65,6 +65,9 @@ const registerEndpoint = (
   router: Router,
   { method, path, authProviders, requestBodySchema, handlers }: EndpointRegistration
 ) => {
+  if (!path.startsWith('/')) {
+    path = '/' + path;
+  }
   const func = (router as { [key: string]: any })[method.toLowerCase()];
   if (typeof func === 'function') {
     logger.debug(`Registering endpoint ${method.toUpperCase()} ${path}`);
