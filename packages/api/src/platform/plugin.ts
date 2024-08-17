@@ -11,6 +11,8 @@ import { isMatch } from 'micromatch';
 import { clearInterval } from 'node:timers';
 import { Resource } from './resources';
 import { Platform } from './index';
+import { ZodObject } from 'zod';
+import { validateRequest } from './validation';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -19,6 +21,7 @@ class EndpointRegistration {
   path: string;
   handlers: RequestHandler[];
   authProviders: string[] | null = ['jwt'];
+  requestBodySchema: ZodObject<any> | undefined;
 
   constructor(method: HttpMethod, path: string, handlers: RequestHandler[]) {
     this.method = method;
@@ -31,6 +34,9 @@ class EndpointRegistration {
     } else {
       this.authProviders = [auth];
     }
+  }
+  withValidation(schema: ZodObject<any>) {
+    this.requestBodySchema = schema;
   }
 }
 
@@ -55,16 +61,22 @@ type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promi
 
 const logger = getLogger();
 
-const registerEndpoint = (router: Router, { method, path, authProviders, handlers }: EndpointRegistration) => {
+const registerEndpoint = (
+  router: Router,
+  { method, path, authProviders, requestBodySchema, handlers }: EndpointRegistration
+) => {
   const func = (router as { [key: string]: any })[method.toLowerCase()];
   if (typeof func === 'function') {
     logger.debug(`Registering endpoint ${method.toUpperCase()} ${path}`);
+    const middlewares = [];
     if (authProviders != null && authProviders.length > 0) {
       const auth = passport.authenticate(authProviders, { session: false });
-      func.call(router, path, auth, ...handlers);
-    } else {
-      func.call(router, path, ...handlers);
+      middlewares.push(auth);
     }
+    if (requestBodySchema != null) {
+      middlewares.push(validateRequest(requestBodySchema));
+    }
+    func.call(router, path, ...middlewares, ...handlers);
   }
 };
 
