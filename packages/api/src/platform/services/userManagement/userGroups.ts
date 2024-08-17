@@ -32,13 +32,13 @@ type UserGroupUpdate = {
   };
 };
 
-const isEmailAddress : boolean = (address: string) => {
-  if(address == null || address.trim().length <= 1) {
+const isEmailAddress = (address: string): boolean => {
+  if (address == null || address.trim().length <= 1) {
     return false;
   }
   const atIndex = address.indexOf('@');
-  return atIndex > 1 && address.indexOf('@', atIndex) === -1 && address.indexOf('.', atIndex > -1);
-}
+  return atIndex > 1 && address.indexOf('@', atIndex) === -1 && address.indexOf('.', atIndex) > -1;
+};
 
 export const findUserByUid = async (securityContext: SecurityContext, uid: string, enabledUsersOnly = true) => {
   const requiredPermissions = enabledUsersOnly ? Permissions.READ : Permissions.READ | Permissions.UPDATE;
@@ -107,7 +107,7 @@ export const createUser = async (
             createdByUid: securityContext.principalUid,
           },
         });
-        if(emailAddress != null) {
+        if (emailAddress != null) {
           await tx.contact.create({
             data: {
               userId: user.id,
