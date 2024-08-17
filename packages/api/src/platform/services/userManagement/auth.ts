@@ -3,7 +3,7 @@ import { config } from '../../config';
 import { platformPrisma as prisma } from '../../prisma';
 import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
-import { User } from '@/../prisma/generated/platformClient';
+import { User } from '../../../../prisma/generated/platformClient';
 import { notify, notifyContact } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
