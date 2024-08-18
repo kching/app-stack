@@ -12,7 +12,7 @@ import { clearInterval } from 'node:timers';
 import { Resource } from './resources';
 import { Platform } from './index';
 import { ZodObject } from 'zod';
-import { validateRequest } from './validation';
+import { validateRequest, ValidationSchema } from './validation';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
@@ -21,7 +21,7 @@ class EndpointRegistration {
   path: string;
   handlers: RequestHandler[];
   authProviders: string[] | null = ['jwt'];
-  requestBodySchema: ZodObject<any> | undefined;
+  requestBodySchema?: ValidationSchema;
 
   constructor(method: HttpMethod, path: string, handlers: RequestHandler[]) {
     this.method = method;

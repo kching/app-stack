@@ -1,7 +1,9 @@
-import { ZodError, ZodObject } from 'zod';
+import { ZodDiscriminatedUnion, ZodError, ZodObject, ZodUnion } from 'zod';
 import { Request, Response, NextFunction } from 'express';
 
-export const validateRequest = (schema: ZodObject<any>) => (req: Request, res: Response, next: NextFunction) => {
+export type ValidationSchema = ZodObject<any> | ZodUnion<any> | ZodDiscriminatedUnion<any, any>;
+
+export const validateRequest = (schema: ValidationSchema) => (req: Request, res: Response, next: NextFunction) => {
   try {
     schema.parse(req.body);
     next();
