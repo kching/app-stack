@@ -25,6 +25,7 @@ router.use(passport.initialize());
 passport.use(jwt());
 
 const startPlugins = async (platform: Platform, roots: string[], options: { [key: string]: any } = {}) => {
+  const startedPlugins: Plugin[] = [];
   const coreInitialisations = await Promise.all(roots.map((coreRoot) => initialise(platform, coreRoot, options)));
   const plugins = flatten(coreInitialisations)
     .filter((r) => r.status === 'fulfilled')
@@ -33,17 +34,20 @@ const startPlugins = async (platform: Platform, roots: string[], options: { [key
     .filter((plugin) => plugin != null);
   for (const plugin of plugins) {
     try {
-      await plugin.withRouter(router).withWebSocket(webSocketServer).start();
+      const startedPlugin = await plugin.withRouter(router).withWebSocket(webSocketServer).start();
+      if (startedPlugin) {
+        startedPlugins.push(startedPlugin);
+      }
     } catch (error) {
       if (error instanceof PluginInitialisationError) {
         const pluginStartError = error as PluginInitialisationError;
         getLogger().error(`Circular dependency for plugins detected: ${pluginStartError.dependencyChain.join(' -> ')}`);
       }
       console.error(error);
-      process.exit(1);
+      throw error;
     }
   }
-  return plugins;
+  return startedPlugins;
 };
 
 const platformResourceResolver = new PrismaResourceResolver(platformPrisma);
@@ -103,6 +107,11 @@ export class Platform {
     extensions.forEach((plugin) => {
       this._plugins[plugin.id] = plugin;
     });
+    getLogger().info(
+      `${services.length} platform ${services.length < 2 ? 'service' : 'services'} and ` +
+        `${extensions.length} extension ${extensions.length < 2 ? 'service' : 'services'} started`
+    );
+
     const resolvedPort = port ?? config.app.port;
 
     app.use(json());

@@ -257,6 +257,7 @@ export class Plugin {
         await this.startCallback(this.executionContext, this.options);
       }
       this._status = 'started';
+      return this;
     } else if (this.status === 'starting') {
       throw new PluginInitialisationError(this.id, this.status, dependencyChain);
     }
