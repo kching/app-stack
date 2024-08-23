@@ -3,6 +3,7 @@ import { platformPrisma as prisma } from '../../prisma';
 import { DateTime } from 'luxon';
 import { schedule } from 'node-cron';
 import { Permissions, SecurityContext } from '../../accessControl';
+import { Service } from '../../plugin';
 
 export abstract class NotificationProvider {
   protected constructor() {}
@@ -80,6 +81,14 @@ const getDestinations = async (recipientUid: string, eventName: string) => {
     },
   });
   return result.map((r) => ({ channel: r.channel, address: r.contact.address }));
+};
+
+const purgeOldData = async (cutOff: Date) => {
+  await prisma.messageOutBox.deleteMany({
+    where: {
+      sentAt: { lt: cutOff },
+    },
+  });
 };
 
 class NotificationContext {
@@ -215,16 +224,20 @@ export const subscribeContactToEvent = async (
 };
 export default notifications;
 
-const purgeOldData = async (cutOff: Date) => {
-  await prisma.messageOutBox.deleteMany({
-    where: {
-      sentAt: { lt: cutOff },
-    },
-  });
-};
-purgeOldData(DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate()).then(() => {
+export function init(this: Service) {
+  this.setId('platform/notifications');
   schedule('0 0 0 * * *', async () => {
     const cutOff = DateTime.now().minus({ day: config.notification.outBoundRetentionDays }).toJSDate();
     await purgeOldData(cutOff);
   });
-});
+
+  this.onStart(async () => {
+    await purgeOldData(
+      DateTime.now()
+        .minus({
+          day: config.notification.outBoundRetentionDays,
+        })
+        .toJSDate()
+    );
+  });
+}

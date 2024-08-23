@@ -179,11 +179,11 @@ export async function init(this: Service) {
     res.status(200).json(prefs);
   });
   this.useEndpoint('patch', '/groups/:uid', async (req, res) => {
-    const securityContxt = (req.user as UserContext).securityContext;
+    const securityContext = (req.user as UserContext).securityContext;
     const { uid } = req.params;
     if (Array.isArray(req.body as PrefsUpdate[])) {
       req.body.map((prefsUpdate: PrefsUpdate) => {
-        updatePreference(securityContxt, `group/${uid}`, prefsUpdate);
+        updatePreference(securityContext, `group/${uid}`, prefsUpdate);
       });
     }
     res.status(200).end();
