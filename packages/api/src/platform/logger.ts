@@ -6,12 +6,10 @@ const { combine, timestamp, prettyPrint, printf, errors } = format;
 
 const lineFormat = printf(
   ({ timestamp, level, label, message }) =>
-    `[${timestamp} | ${level.toUpperCase()}${
-      label ? ` | ${label}` : ''
-    } ]  ${message}`
+    `[${timestamp} | ${level.toUpperCase()}${label ? ` | ${label}` : ''} ]  ${message}`
 );
 
-const childLoggers: { [key: string]: Logger } = {};
+const childLoggers: Map<string, Logger> = new Map();
 const loggingLevel = config.logging.level;
 
 const rootLogger = createLogger({
@@ -44,10 +42,10 @@ const rootLogger = createLogger({
 
 export const getLogger = (label?: string): Logger => {
   if (label) {
-    let childLogger = childLoggers[label];
+    let childLogger = childLoggers.get(label);
     if (!childLogger) {
       childLogger = rootLogger.child({ label: label });
-      childLoggers[label] = childLogger;
+      childLoggers.set(label, childLogger);
     }
     return childLogger;
   } else {

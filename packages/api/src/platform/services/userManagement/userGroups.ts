@@ -9,6 +9,8 @@ import * as runtime from '../../../../prisma/generated/platformClient/runtime/li
 import { publish } from '../../events';
 import { Permissions, SecurityContext } from '../../accessControl';
 import { assignPermission } from './permissions';
+import subscriptionRepository from '../notifications/subscriptionRepository';
+import { pick } from 'lodash';
 import { subscribeContactToEvent } from '../notifications';
 
 type Action = 'CREATE' | 'UPDATE' | 'DELETE';
@@ -132,7 +134,10 @@ export const createUser = async (
       },
     });
     if (contact) {
-      await subscribeContactToEvent(securityContext, contact.uid, 'forgotPassword');
+      await subscribeContactToEvent(securityContext, 'forgotPassword', {
+        userUid: user.uid,
+        ...pick(contact, ['channel', 'address', 'secret']),
+      });
     }
 
     await assignPermission(

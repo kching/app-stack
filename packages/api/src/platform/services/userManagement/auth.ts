@@ -4,7 +4,7 @@ import { platformPrisma as prisma } from '../../prisma';
 import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '../../../../prisma/generated/platformClient';
-import { notify, notifyContact } from '../notifications';
+import { notify } from '../notifications';
 import Jwt from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { publish } from '../../events';
@@ -238,21 +238,6 @@ export async function init(this: Service) {
         })
         .onChannel('email')
         .send();
-
-      // const contact = await prisma.contact.findFirst({
-      //   where: {
-      //     userId: auth.user.id,
-      //     passwordRecovery: true,
-      //   },
-      // });
-      // if (contact) {
-      //   await notifyContact(contact.uid, 'forgotPassword', {
-      //     username: auth.username,
-      //     password: newPassword,
-      //   });
-      // } else {
-      //   getLogger('Auth').info(`New password for ${auth.username} is ${newPassword}`);
-      // }
     }
   });
 }

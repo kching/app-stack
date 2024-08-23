@@ -15,17 +15,16 @@ datasource db {
 }
 
 model User {
-  id             Int            @id @default(autoincrement())
-  uid            String         @unique @default(cuid())
-  enabled        Boolean        @default(true)
+  id             Int          @id @default(autoincrement())
+  uid            String       @unique @default(cuid())
+  enabled        Boolean      @default(true)
   lastAccessedAt DateTime?
-  displayName    String         @default("")
+  displayName    String       @default("")
   authSchemes    AuthScheme[]
   contacts       Contact[]
-  subscriptions  Subscription[]
   memberOf       UserGroup[]
   createdByUid   String
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime     @default(now())
 }
 
 model Group {
@@ -62,17 +61,20 @@ model SecurityPolicy {
 }
 
 model Contact {
-  id           Int            @id @default(autoincrement())
-  userId       Int
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  uid          String         @unique @default(cuid())
-  ownerUid     String
-  channel      String
-  address      String
-  secret       String? // some channels may require authentication ie. Telegram
-  verified     Boolean        @default(false)
-  primary      Boolean        @default(false)
-  Subscription Subscription[]
+  id            Int             @id @default(autoincrement())
+  userId        Int
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uid           String          @unique @default(cuid())
+  ownerUid      String
+  channel       String
+  address       String
+  secret        String? // some channels may require authentication ie. Telegram
+  verified      Boolean         @default(false)
+  primary       Boolean         @default(false)
+  Subscription  Subscription[]
+  MessageOutBox MessageOutBox[]
+
+  @@unique([ownerUid, channel, address])
 }
 
 model AuthScheme {
@@ -89,30 +91,31 @@ model AuthScheme {
 }
 
 model Subscription {
-  id        Int     @id @default(autoincrement())
-  uid       String  @default(cuid())
-  ownerUid  String
-  contactId Int
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  event     String
-  channel   String
-  enabled   Boolean
-  User      User    @relation(fields: [userId], references: [id])
-  userId    Int
+  id           Int     @id @default(autoincrement())
+  uid          String  @default(cuid())
+  ownerUid     String
+  event        String
+  enabled      Boolean
+  displayOrder Int
+  contactId    Int
+  contact      Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  @@unique(fields: [contactId, event, channel])
+  @@unique(fields: [contactId, event])
+  @@index([enabled, event])
 }
 
 model MessageOutBox {
   id         Int       @id @default(autoincrement())
   eventName  String
   data       String
-  channel    String
-  address    String
   sentAt     DateTime  @default(now())
   lastSentAt DateTime?
   status     String    @default("pending")
   errorCount Int       @default(0)
+  contactId  Int
+  contact    Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt])
 }
 
 model Preference {
