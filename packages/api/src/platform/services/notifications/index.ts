@@ -119,7 +119,7 @@ export const subscribeContactToEvent = async (
     `subscriptions/[ownerUid=${contact.userUid}]`
   );
   if (hasPermissions) {
-    return subscriptionRepository.createSubscription(eventName, contact);
+    return subscriptionRepository.createSubscription(eventName, contact, securityContext.principalUid);
   } else {
     throw new Error(`No permissions to modify user's subscription`);
   }

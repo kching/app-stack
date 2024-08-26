@@ -101,7 +101,11 @@ class PrismaSubscriptionsRepository {
     }));
   }
 
-  async createSubscription(event: string, { userUid, channel, address, secret }: Contact): Promise<Subscription> {
+  async createSubscription(
+    event: string,
+    { userUid, channel, address, secret }: Contact,
+    ownerUid: string
+  ): Promise<Subscription> {
     const user = await this.prisma.user.findUnique({
       where: { uid: userUid },
     });
@@ -120,7 +124,7 @@ class PrismaSubscriptionsRepository {
         },
         create: {
           user: { connect: { id: user.id } },
-          ownerUid: user.uid,
+          ownerUid: ownerUid,
           address,
           secret,
           channel,
@@ -168,7 +172,7 @@ class PrismaSubscriptionsRepository {
     return {
       ...pick(subscription, ['id', 'event']),
       contact: {
-        userUid: subscription.ownerUid,
+        userUid: subscription.contact.ownerUid,
         ...pick(subscription.contact, ['channel', 'address', 'secret']),
       },
     };
@@ -181,19 +185,19 @@ class PrismaSubscriptionsRepository {
     if (subscription) {
       let updateContact = undefined;
       if (updates.contact) {
-        const { channel, address, secret } = updates.contact;
+        const { userUid, channel, address, secret } = updates.contact;
         updateContact = {
           connectOrCreate: {
             where: {
               ownerUid_channel_address: {
-                ownerUid: subscription.ownerUid,
+                ownerUid: userUid,
                 channel,
                 address,
               },
             },
             create: {
-              user: { connect: { uid: subscription.ownerUid } },
-              ownerUid: subscription.ownerUid,
+              user: { connect: { uid: userUid } },
+              ownerUid: userUid,
               channel,
               address,
             },
