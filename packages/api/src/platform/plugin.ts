@@ -34,9 +34,11 @@ class EndpointRegistration {
     } else {
       this.authProviders = [auth];
     }
+    return this;
   }
   withValidation(schema: ValidationSchema) {
     this.requestBodySchema = schema;
+    return this;
   }
 }
 
