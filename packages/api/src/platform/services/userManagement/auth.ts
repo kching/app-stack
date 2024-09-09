@@ -11,13 +11,12 @@ import { publish } from '../../events';
 import fs from 'fs';
 import { randomBytes } from 'node:crypto';
 import { SecurityContext } from '../../accessControl';
+import { IncomingMessage } from 'http';
 
 export type UserContext = {
   userUid: string;
   securityContext: SecurityContext;
 };
-
-type CookieRequest = { cookies: { [key: string]: string } };
 
 let jwtSecret: string | Buffer | undefined = undefined;
 const getJwtSecret = () => {
@@ -34,12 +33,18 @@ const getJwtSecret = () => {
   return jwtSecret;
 };
 
-const fromCookieAsToken = (req: CookieRequest) => {
-  if (req && req.cookies) {
-    return req.cookies['next-auth.session-token'];
-  } else {
-    return null;
+const fromCookieAsToken = (req: IncomingMessage) => {
+  if (req && req.headers?.cookie) {
+    const cookieMap: Map<string, string> = req.headers?.cookie.split(';').reduce((cookieMap, entry) => {
+      const [key, value] = entry.trim().split('=');
+      cookieMap.set(key, value);
+      return cookieMap;
+    }, new Map<string, string>());
+    if (cookieMap.has('accessToken')) {
+      return cookieMap.get('accessToken') as string;
+    }
   }
+  return null;
 };
 
 export const jwt = () => {
@@ -108,7 +113,7 @@ const createAccessToken = async (user: User) => {
       subject: user.uid,
       issuer: config.auth.issuer,
       audience: config.app.domain,
-      expiresIn: config.auth.tokenMaxAgeSeconds,
+      expiresIn: config.auth.tokenMaxAgeSeconds * 1000,
     }
   );
 };
@@ -169,7 +174,7 @@ export async function init(this: Service) {
 
   this.useEndpoint('post', '/logout', async (req, res) => {
     const user = req.user as { uid: string };
-    res.status(200).clearCookie('access-token').clearCookie('refresh-token').end();
+    res.status(200).clearCookie('accessToken').clearCookie('refreshToken').end();
     publish('auth.loggedOut', { userUid: user.uid });
   });
 

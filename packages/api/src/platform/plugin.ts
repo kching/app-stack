@@ -11,7 +11,6 @@ import { isMatch } from 'micromatch';
 import { clearInterval } from 'node:timers';
 import { Resource } from './resources';
 import { Platform } from './index';
-import { ZodObject } from 'zod';
 import { validateRequest, ValidationSchema } from './validation';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';

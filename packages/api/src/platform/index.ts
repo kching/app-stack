@@ -1,4 +1,4 @@
-import express, { Express, json, static as staticResource } from 'express';
+import express, { Express, json } from 'express';
 import { config } from './config';
 import { createServer } from 'http';
 import cookieParser from 'cookie-parser';
@@ -11,7 +11,6 @@ import { Server } from 'node:http';
 import { createWebSocketServer } from './webSockets';
 import { ChainedResourceResolver, PrismaResourceResolver, ResourceResolver } from './resources';
 import { platformPrisma } from './prisma';
-import { PrismaClient } from '@prisma/client';
 import notifications, { NotificationProvider } from './services/notifications';
 
 const app = express();
