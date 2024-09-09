@@ -5,13 +5,14 @@ import { Service } from '../../plugin';
 import bcrypt from 'bcryptjs';
 import { User } from '../../../../prisma/generated/platformClient';
 import { notify } from '../notifications';
-import Jwt from 'jsonwebtoken';
+import Jwt, { JwtPayload, VerifyErrors } from 'jsonwebtoken';
 import fromExtractors = ExtractJwt.fromExtractors;
 import { publish } from '../../events';
 import fs from 'fs';
 import { randomBytes } from 'node:crypto';
 import { SecurityContext } from '../../accessControl';
 import { IncomingMessage } from 'http';
+import { getLogger } from '../../logger';
 
 export type UserContext = {
   userUid: string;
@@ -42,6 +43,44 @@ const fromCookieAsToken = (req: IncomingMessage) => {
     }, new Map<string, string>());
     if (cookieMap.has('accessToken')) {
       return cookieMap.get('accessToken') as string;
+    }
+  }
+  return null;
+};
+
+const fromHeaderAsToken = (req: IncomingMessage) => {
+  if (req && req.headers?.authorization) {
+    const [, token] = req.headers?.authorization?.split(/\s+/);
+    return token;
+  }
+  return null;
+};
+
+export const getUserId = async (req: IncomingMessage) => {
+  const token = fromHeaderAsToken(req) ?? fromCookieAsToken(req);
+  if (token) {
+    const verifyToken = new Promise<JwtPayload>((resolve, reject) => {
+      Jwt.verify(
+        token,
+        getJwtSecret,
+        {
+          issuer: config.auth.issuer,
+          audience: config.app.domain,
+        },
+        (error, payload) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(payload as JwtPayload);
+          }
+        }
+      );
+    });
+    try {
+      const { sub } = await verifyToken;
+      return sub;
+    } catch (error) {
+      getLogger('webSockets').error('Failed to decode access token');
     }
   }
   return null;
@@ -81,14 +120,6 @@ export const jwt = () => {
     }
   });
 };
-
-// export const bearer = () => {
-//   return new BearerStrategy((token, done) => {
-//     if(token === 'Whatever') {
-//
-//     }
-//   });
-// }
 
 export const findAuthByScheme = async (scheme: string, username: string) => {
   return prisma.authScheme.findUnique({

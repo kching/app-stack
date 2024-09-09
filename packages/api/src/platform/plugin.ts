@@ -2,7 +2,7 @@ import path from 'path';
 import { RequestHandler, Router } from 'express';
 import { getLogger } from './logger';
 import { scanForFiles } from './fileUtils';
-import { UseWebSocketOptions, WebSocketProxy, WSServer } from './webSockets';
+import { UseWebSocketOptions, WebSocketEndpoint, WSServer } from './webSockets';
 import { Logger } from 'winston';
 import { schedule, ScheduledTask } from 'node-cron';
 import passport from 'passport';
@@ -154,7 +154,7 @@ export class PluginInitialisationError extends Error {
 
 export class Plugin {
   private readonly endpoints: EndpointRegistration[] = [];
-  private readonly webSocketProxies: WebSocketProxy[] = [];
+  private readonly webSocketProxies: WebSocketEndpoint[] = [];
   private readonly cronTasks: ScheduledTask[] = [];
   private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: NodeJS.Timeout }[] = [];
   private readonly options: { [key: string]: any } = {};
@@ -304,10 +304,10 @@ export class Plugin {
     return reg;
   }
 
-  useWebSocket(path: string, options: UseWebSocketOptions): WebSocketProxy {
+  useWebSocket(path: string, options: UseWebSocketOptions): WebSocketEndpoint {
     let socketRegistration = this.webSocketProxies.find((r) => r.path === path);
     if (!socketRegistration) {
-      socketRegistration = new WebSocketProxy(path, options);
+      socketRegistration = new WebSocketEndpoint(path, options);
       this.webSocketProxies.push(socketRegistration);
     }
     return socketRegistration;

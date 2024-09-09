@@ -2,6 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { IncomingMessage, Server } from 'http';
 import UrlPattern from 'url-pattern';
 import { getLogger } from './logger';
+import { getUserId } from './services/userManagement/auth';
 
 type WebSocketOptions = {
   userUid?: string;
@@ -20,17 +21,22 @@ export type UseWebSocketOptions = {
   decoder?: MessageDecoder;
 };
 
-const getUser = (request: IncomingMessage) => {
-  return '';
-};
-
 const jsonDecoder = (event: WebSocket.MessageEvent) => {
-  return {};
+  if (typeof event.data === 'string') {
+    return JSON.parse(event.data);
+  }
+  if (event.data instanceof Array) {
+    event.data = Buffer.concat(event.data);
+  }
+  if (event.data instanceof Buffer) {
+    event.data = event.data.buffer.slice(event.data.byteOffset, event.data.byteOffset + event.data.byteLength);
+  }
+  return JSON.parse(new TextDecoder().decode(event.data as ArrayBuffer));
 };
 
 const jsonEncoder = (message: object) => JSON.stringify(message);
 
-export class WebSocketProxy {
+export class WebSocketEndpoint {
   readonly path;
   readonly decode: MessageDecoder = jsonDecoder;
   readonly encode: MessageEncoder = jsonEncoder;
@@ -107,88 +113,90 @@ export class WebSocketProxy {
 }
 
 export class WSServer {
-  private readonly wsProxies: WebSocketProxy[] = [];
+  private readonly wsProxies: WebSocketEndpoint[] = [];
 
   constructor(httpServer: Server) {
     const webSocketServer = new WebSocketServer({ server: httpServer });
     webSocketServer.on('connection', (ws, request) => {
       if (request.url) {
-        this.wsProxies.forEach((registration) => {
+        this.wsProxies.map(async (registration) => {
           const pattern = new UrlPattern(registration.path);
           const params = pattern.match(request.url as string);
           if (params) {
-            const userUid = getUser(request);
-            const handlerOptions = { params, req: request, userUid, ws };
-            registration.clientSockets.push(ws);
-            let userSockets = registration.socketByUserUid.get({ userUid });
-            if (!userSockets) {
-              userSockets = [];
-              registration.socketByUserUid.set({ userUid }, userSockets);
-            }
-            userSockets.push(ws);
-            registration._onConnect.forEach((handler) => {
-              ws.onmessage = (event) => {
-                const message = registration.decode(event);
-                registration._onMessage.forEach((handler) => {
-                  try {
-                    handler(message, handlerOptions);
-                  } catch (error) {
-                    getLogger('webSocket').error((error as unknown as Error).stack);
-                  }
-                });
-              };
-              ws.onclose = () => {
-                const userSockets = registration.socketByUserUid.get({ userUid });
-                if (userSockets) {
-                  const index = userSockets.indexOf(ws);
-                  if (index > -1) {
-                    userSockets.splice(index, 1);
-                  }
-                  if (userSockets.length === 0) {
-                    registration.socketByUserUid.delete({ userUid });
-                  }
-                }
-                const index = registration.clientSockets.indexOf(ws);
-                if (index > -1) {
-                  registration.clientSockets.splice(index, 1);
-                }
-                registration._onDisconnect.forEach((handler) => {
-                  try {
-                    handler(ws, handlerOptions);
-                  } catch (error) {
-                    getLogger('webSocket').error((error as unknown as Error).stack);
-                  }
-                });
-              };
-              ws.onerror = (event) => {
-                registration._onError.forEach((handler) => {
-                  try {
-                    handler(event);
-                  } catch (error) {
-                    getLogger('webSocket').error((error as unknown as Error).stack);
-                  }
-                });
-              };
-              try {
-                handler(ws, handlerOptions);
-              } catch (error) {
-                getLogger('webSocket').error((error as unknown as Error).stack);
+            const userUid = await getUserId(request);
+            if (userUid) {
+              const handlerOptions = { params, req: request, userUid, ws };
+              registration.clientSockets.push(ws);
+              let userSockets = registration.socketByUserUid.get({ userUid });
+              if (!userSockets) {
+                userSockets = [];
+                registration.socketByUserUid.set({ userUid }, userSockets);
               }
-            });
+              userSockets.push(ws);
+              registration._onConnect.forEach((handler) => {
+                ws.onmessage = (event) => {
+                  const message = registration.decode(event);
+                  registration._onMessage.forEach((handler) => {
+                    try {
+                      handler(message, handlerOptions);
+                    } catch (error) {
+                      getLogger('webSocket').error((error as unknown as Error).stack);
+                    }
+                  });
+                };
+                ws.onclose = () => {
+                  const userSockets = registration.socketByUserUid.get({ userUid });
+                  if (userSockets) {
+                    const index = userSockets.indexOf(ws);
+                    if (index > -1) {
+                      userSockets.splice(index, 1);
+                    }
+                    if (userSockets.length === 0) {
+                      registration.socketByUserUid.delete({ userUid });
+                    }
+                  }
+                  const index = registration.clientSockets.indexOf(ws);
+                  if (index > -1) {
+                    registration.clientSockets.splice(index, 1);
+                  }
+                  registration._onDisconnect.forEach((handler) => {
+                    try {
+                      handler(ws, handlerOptions);
+                    } catch (error) {
+                      getLogger('webSocket').error((error as unknown as Error).stack);
+                    }
+                  });
+                };
+                ws.onerror = (event) => {
+                  registration._onError.forEach((handler) => {
+                    try {
+                      handler(event);
+                    } catch (error) {
+                      getLogger('webSocket').error((error as unknown as Error).stack);
+                    }
+                  });
+                };
+                try {
+                  handler(ws, handlerOptions);
+                } catch (error) {
+                  getLogger('webSocket').error((error as unknown as Error).stack);
+                }
+              });
+            }
           }
         });
       }
     });
   }
 
-  register(wxProxy: WebSocketProxy) {
-    const index = this.wsProxies.indexOf(wxProxy);
+  register(wsProxy: WebSocketEndpoint) {
+    const index = this.wsProxies.findIndex((proxy) => proxy.path === wsProxy.path);
     if (index === -1) {
-      this.wsProxies.push(wxProxy);
+      this.wsProxies.push(wsProxy);
     }
   }
 
-  unregister(wsProxy: WebSocketProxy) {
+  unregister(wsProxy: WebSocketEndpoint) {
     const index = this.wsProxies.indexOf(wsProxy);
     if (index > -1) {
       this.wsProxies.splice(index, 1);
