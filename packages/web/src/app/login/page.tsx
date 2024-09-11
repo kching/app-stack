@@ -1,19 +1,25 @@
-import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
-import LoginForm from './form';
+import LoginForm from './LoginForm';
+import { getServerSession } from 'next-auth';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
+import React from 'react';
+import LoginStatus from '@/app/login/LoginStatus';
 
-export default async function LoginPage() {
+type PageProps = {
+  searchParams: { [key: string]: string };
+};
+export default async function LoginPage({ searchParams }: PageProps) {
   const session = await getServerSession();
-  console.log({ session });
 
   if (session) {
-    redirect('/');
+    redirect('/main');
   }
 
   return (
-    <section className="h-screen flex items-center justify-center">
+    <section className="h-screen flex flex-col items-center justify-center">
       <div className="w-[600px]">
-        <LoginForm />
+        <LoginStatus successUrl="/main" loginForm={LoginForm} />
       </div>
     </section>
   );

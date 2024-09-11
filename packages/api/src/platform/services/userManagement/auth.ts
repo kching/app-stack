@@ -166,7 +166,7 @@ export async function init(this: Service) {
     if (req.body) {
       const { username, password } = req.body;
       if (username && username.trim().length > 0 && password && password.trim().length > 0) {
-        const auth = await findAuthByScheme('local', username);
+        const auth = await findAuthByScheme('local', username.toLowerCase());
         if (auth && bcrypt.compareSync(password, auth.secret)) {
           user = auth.user.enabled ? auth.user : null;
           if (user) {
@@ -185,6 +185,12 @@ export async function init(this: Service) {
     }
 
     if (user) {
+      const primaryContact = await prisma.contact.findFirst({
+        where: {
+          user,
+          primary: true,
+        },
+      });
       const accessToken = await createAccessToken(user);
       res
         .status(200)
@@ -197,6 +203,7 @@ export async function init(this: Service) {
           uid: user.uid,
           displayName: user.displayName,
           accessToken: accessToken,
+          email: primaryContact?.channel === 'email' ? primaryContact.address : undefined,
         });
     } else {
       res.status(401).end();

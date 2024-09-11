@@ -1,9 +1,19 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { cookies } from 'next/headers';
 import { JWT } from 'next-auth/jwt';
-import { Session } from 'next-auth';
+import { Session as NextAuthSession, AuthOptions, User } from 'next-auth';
 
-const authOptions = {
+export type Session = NextAuthSession & {
+  user?: AuthUser;
+};
+
+// interface User extends AdapterOptions.
+
+interface AuthUser extends User {
+  accessToken?: string;
+}
+
+const authOptions: AuthOptions = {
   pages: {
     signIn: '/login',
   },
@@ -46,7 +56,12 @@ const authOptions = {
               sameSite: 'strict',
               secure: true,
             });
-            return user;
+            return {
+              id: user.uid,
+              name: user.displayName,
+              email: user.email,
+              accessToken: user.accessToken,
+            };
           }
         } catch (error) {}
 
@@ -57,31 +72,21 @@ const authOptions = {
   ],
 
   callbacks: {
-    async session({
-      session,
-      token,
-    }: {
-      session: Session & {
+    async session({ session, token }: { session: NextAuthSession; token: JWT; user: User }) {
+      return {
+        ...session,
         user: {
-          uid: string;
-          accessToken: string;
-        };
-      };
-      token: JWT;
-      user: { uid: string; accessToken: string };
-    }) {
-      if (session.user) {
-        session.user = {
           ...session.user,
-          uid: token.uid as string,
-          accessToken: token.accessToken as string,
-        };
-      }
-      return session;
+          id: token.sub!,
+          accessToken: token.accessToken,
+        },
+      };
     },
-    async jwt({ token, user }: { token: JWT; user: { uid: string; accessToken: string } }) {
+    async jwt({ token, user }: { token: JWT; user: AuthUser }) {
       if (user) {
-        token.uid = user.uid;
+        token.sub = user.id;
+        token.name = user.name;
+        token.email = user.email;
         token.accessToken = user.accessToken;
       }
       return token;

@@ -39,7 +39,7 @@ const isEmailAddress = (address: string): boolean => {
     return false;
   }
   const atIndex = address.indexOf('@');
-  return atIndex > 1 && address.indexOf('@', atIndex) === -1 && address.indexOf('.', atIndex) > -1;
+  return atIndex > 1 && address.indexOf('@', atIndex + 1) === -1 && address.indexOf('.', atIndex) > -1;
 };
 
 export const findUserByUid = async (securityContext: SecurityContext, uid: string, enabledUsersOnly = true) => {
@@ -83,6 +83,7 @@ export const createUser = async (
   secret: string,
   emailAddress?: string
 ) => {
+  username = username.trim().toLowerCase();
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
   const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
   if (createUserAllowed && assignPermissionsAllowed) {
@@ -110,6 +111,7 @@ export const createUser = async (
           },
         });
         if (emailAddress != null) {
+          emailAddress = emailAddress.trim().toLowerCase();
           await tx.contact.create({
             data: {
               userId: user.id,
@@ -615,7 +617,7 @@ export async function init(this: Service) {
         defaultUsers.map(async (user: string) => {
           const [username, secret] = user.split('/');
           if (username.trim().length > 0 && secret.trim().length > 0) {
-            let authScheme = await findAuthByScheme('local', username);
+            let authScheme = await findAuthByScheme('local', username.toLowerCase());
             if (authScheme == null) {
               const hashedPassword = await bcrypt.hash(secret, 12);
               const emailAddress = isEmailAddress(username) ? username : undefined;
