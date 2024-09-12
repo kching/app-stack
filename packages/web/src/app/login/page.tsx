@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation';
 import LoginForm from './LoginForm';
 import { getServerSession } from 'next-auth';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
 import React from 'react';
 import LoginStatus from '@/app/login/LoginStatus';
 

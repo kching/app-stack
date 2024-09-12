@@ -1,3 +1,3 @@
 export default async function Component() {
-  return <>Signed in</>;
+  return <p>Signed in</p>;
 }

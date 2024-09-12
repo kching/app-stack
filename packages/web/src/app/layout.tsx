@@ -18,12 +18,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full w-full overflow-hidden">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
-      <body className={`light ${inter.className}`}>
-        <main>{children}</main>
+      <body className={`h-full w-full overflow-hidden light ${inter.className}`}>
+        <main className="h-full">{children}</main>
         <Toaster />
       </body>
     </html>
