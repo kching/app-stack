@@ -18,7 +18,7 @@ const NavItem = ({ label, url, selected }: NavItemProps) => {
 
   return (
     <li>
-      <Button variant="ghost" onClick={clickHandler}>
+      <Button className="w-full justify-start" variant="ghost" onClick={clickHandler}>
         <span className={selected ? 'font-bold' : ''}>{label}</span>
       </Button>
     </li>

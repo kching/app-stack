@@ -3,7 +3,7 @@ import React, { PropsWithChildren, useMemo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { NavItemProps } from '@/components/nav/NavItem';
+import { NavItemProps } from './NavItem';
 
 export type NavGroupProps = {
   label?: string;
@@ -17,11 +17,13 @@ const CollapsibleDecorator = ({ children, label }: CollapsibleDecoratorProps) =>
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
       <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="p-0">
+        <Button variant="ghost" size="sm" className="px-4 w-full justify-start">
           <h4 className="text-sm">
             <span>{label}</span>
           </h4>
-          <span>{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
+          <span className="ml-1">
+            {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </span>
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>{children}</CollapsibleContent>

@@ -9,7 +9,7 @@ type NavigatorProps = HTMLAttributes<HTMLElement> & {
   navGroups: NavGroupProps[];
   selectedItem?: string;
 };
-const Navigator = ({ selectedItem, navGroups }: NavigatorProps) => {
+const Navigator = ({ className, selectedItem, navGroups }: NavigatorProps) => {
   const pathName = usePathname();
   const selectedItemId = useMemo(() => {
     if (selectedItem) {
@@ -20,7 +20,7 @@ const Navigator = ({ selectedItem, navGroups }: NavigatorProps) => {
     }
   }, [pathName, selectedItem, navGroups]);
   return (
-    <nav className="space-y-4">
+    <nav className={`space-y-4 ${className}`}>
       {navGroups.map((group, index) => (
         <NavGroup key={index} {...group} selectedItem={selectedItemId} />
       ))}

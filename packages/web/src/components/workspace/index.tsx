@@ -9,8 +9,8 @@ type WorkspaceProps = PropsWithChildren<{
 const Workspace = ({ navGroups, children }: WorkspaceProps) => {
   return (
     <div className="flex h-full">
-      <div className="p-1 min-w-[225px]">
-        <Navigator navGroups={navGroups} />
+      <div>
+        <Navigator className="p-2 min-w-[160px]" navGroups={navGroups} />
       </div>
       <div className="flex-grow">{children}</div>
     </div>

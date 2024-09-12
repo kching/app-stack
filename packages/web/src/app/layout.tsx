@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import React from 'react';
 import { Toaster } from '@/components/ui/toaster';
+import { ThemeProvider } from '@/ThemeProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,13 +19,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full w-full overflow-hidden">
+    <html lang="en" className="h-full overflow-hidden" suppressHydrationWarning>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
-      <body className={`h-full w-full overflow-hidden light ${inter.className}`}>
-        <main className="h-full">{children}</main>
-        <Toaster />
+      <body className={`h-full w-full overflow-hidden ${inter.className}`}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <main className="h-full">{children}</main>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
