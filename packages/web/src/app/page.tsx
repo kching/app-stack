@@ -18,9 +18,9 @@ export default function Home() {
         <p>Hello world! This is a public landing page to a sample application.</p>
         <p>
           Click
-          <Button asChild variant="link" className="ml-1 p-0">
-            <Link href="/main"> here</Link>
-          </Button>{' '}
+          <a className="mx-1 text-primary hover:underline" href="/main">
+            here
+          </a>
           to proceed.
         </p>
       </div>
