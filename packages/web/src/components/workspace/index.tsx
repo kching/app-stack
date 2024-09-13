@@ -1,18 +1,30 @@
 import React, { PropsWithChildren } from 'react';
-import { NavGroupProps } from '@/components/workspace/NavGroup';
-import Navigator from '@/components/workspace/Navigator';
+import { NavGroupAttributes } from '@/components/workspace/NavGroup';
+import Navigator, { MobileNav } from '@/components/workspace/Navigator';
+import HeaderBar from '@/components/workspace/HeaderBar';
+import PageStateProvider from '@/components/workspace/PageStateProvider';
 
 type WorkspaceProps = PropsWithChildren<{
-  navGroups: NavGroupProps[];
+  navGroups: NavGroupAttributes[];
 }>;
 
 const Workspace = ({ navGroups, children }: WorkspaceProps) => {
   return (
     <div className="flex h-full">
       <div>
-        <Navigator className="p-2 min-w-[160px]" navGroups={navGroups} />
+        <div className="flex items-center h-10 m-2">
+          <MobileNav navGroups={navGroups} />
+        </div>
+        <div className="overflow-y-auto">
+          <Navigator className="hidden md:block p-2 min-w-[160px]" navGroups={navGroups} />
+        </div>
       </div>
-      <div className="flex-grow">{children}</div>
+      <PageStateProvider>
+        <div className="flex-grow">
+          <HeaderBar />
+          <div className="overflow-y-auto">{children}</div>
+        </div>
+      </PageStateProvider>
     </div>
   );
 };

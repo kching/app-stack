@@ -5,8 +5,8 @@ import { useEffect } from 'react';
 export default function Component() {
   const { setState } = usePageContext();
   useEffect(() => {
-    setState('title', 'Some page title');
+    setState('title', 'Another Page');
   }, []);
 
-  return <p>Some page content</p>;
+  return <p>Another page content</p>;
 }

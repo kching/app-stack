@@ -1,20 +1,21 @@
-import React, { useCallback, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 
-export type NavItemProps = {
+export type NavItemAttributes = {
   id: string;
   label: string;
   url: string;
+};
+type NavItemProps = NavItemAttributes & {
+  onClick: (item: NavItemAttributes) => void;
   selected?: boolean;
 };
-const NavItem = ({ label, url, selected }: NavItemProps) => {
-  const router = useRouter();
-  const pathName = usePathname();
-  const clickHandler = useCallback(() => {
-    router.push(url);
-    router.refresh();
-  }, [router, url]);
+const NavItem = ({ id, label, url, selected, onClick }: NavItemProps) => {
+  const clickHandler = () => {
+    if (typeof onClick === 'function') {
+      onClick({ id, label, url });
+    }
+  };
 
   return (
     <li>

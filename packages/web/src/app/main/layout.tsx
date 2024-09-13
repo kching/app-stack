@@ -1,52 +1,15 @@
-import React, { PropsWithChildren } from 'react';
+import React from 'react';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/api/auth/[...nextauth]/authOptions';
 import { redirect } from 'next/navigation';
 import Workspace from '@/components/workspace';
-import { NavGroupProps } from '@/components/workspace/NavGroup';
+import { NavGroupAttributes } from '@/components/workspace/NavGroup';
+import pages from './pages.json';
 
-const navGroups: NavGroupProps[] = [
-  {
-    label: '',
-    items: [
-      {
-        id: '1',
-        label: 'Page 1',
-        url: '/main',
-      },
-      {
-        id: '2',
-        label: 'Page 2',
-        url: '/page2',
-      },
-      {
-        id: '3',
-        label: 'Page 3',
-        url: '/page3',
-      },
-    ],
-  },
-  {
-    label: 'rawr2',
-    items: [
-      {
-        id: '1',
-        label: 'Page 1',
-        url: '/main',
-      },
-      {
-        id: '2',
-        label: 'Page 2',
-        url: '/page2',
-      },
-      {
-        id: '3',
-        label: 'Page 3',
-        url: '/page3',
-      },
-    ],
-  },
-];
+const navGroups: NavGroupAttributes[] = (pages as NavGroupAttributes[]).map((group) => ({
+  ...group,
+  items: group.items.map((item) => ({ ...item, id: item.id ?? item.url })),
+}));
 
 export default async function AuthLayout({
   children,

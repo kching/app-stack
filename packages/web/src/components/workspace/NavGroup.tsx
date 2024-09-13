@@ -3,17 +3,21 @@ import React, { PropsWithChildren, useMemo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { NavItemProps } from './NavItem';
+import { NavItemAttributes } from './NavItem';
 
-export type NavGroupProps = {
+export type NavGroupAttributes = {
   label?: string;
-  items: NavItemProps[];
+  items: NavItemAttributes[];
   selectedItem?: string;
 };
 
-type CollapsibleDecoratorProps = PropsWithChildren<{ label: string }>;
-const CollapsibleDecorator = ({ children, label }: CollapsibleDecoratorProps) => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+type NavGroupProps = NavGroupAttributes & {
+  onSelection: (item: NavItemAttributes) => void;
+};
+
+type CollapsibleDecoratorProps = PropsWithChildren<{ label: string; expanded?: boolean }>;
+const CollapsibleDecorator = ({ children, label, expanded }: CollapsibleDecoratorProps) => {
+  const [isOpen, setIsOpen] = useState<boolean>(expanded === true);
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
       <CollapsibleTrigger asChild>
@@ -26,18 +30,21 @@ const CollapsibleDecorator = ({ children, label }: CollapsibleDecoratorProps) =>
           </span>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent>{children}</CollapsibleContent>
+      <CollapsibleContent>
+        <div className="pl-2">{children}</div>
+      </CollapsibleContent>
     </Collapsible>
   );
 };
 
-const NavGroup = ({ label, items, selectedItem }: NavGroupProps) => {
+const NavGroup = ({ label, items, selectedItem, onSelection }: NavGroupProps) => {
   const expandable = useMemo(() => label != null && label.trim().length > 0, [label]);
+  const expanded = items.find((item) => item.id === selectedItem) != null;
   const itemList = useMemo(() => {
     return (
       <ul>
         {items.map((item) => (
-          <NavItem key={item.id} {...item} selected={item.id === selectedItem} />
+          <NavItem key={item.id} {...item} selected={item.id === selectedItem} onClick={onSelection} />
         ))}
       </ul>
     );
@@ -46,7 +53,9 @@ const NavGroup = ({ label, items, selectedItem }: NavGroupProps) => {
   return (
     <div>
       {expandable && label ? (
-        <CollapsibleDecorator label={label}> {itemList}</CollapsibleDecorator>
+        <CollapsibleDecorator label={label} expanded={expanded}>
+          {itemList}
+        </CollapsibleDecorator>
       ) : (
         <div>{itemList}</div>
       )}
