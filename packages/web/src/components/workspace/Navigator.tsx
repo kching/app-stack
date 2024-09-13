@@ -33,7 +33,7 @@ const Navigator = ({ className, selectedItem, navGroups, onChange }: NavigatorPr
   return (
     <nav className={`${className}`}>
       {navGroups.map((group, index) => (
-        <NavGroup key={index} {...group} selectedItem={selectedItemId} onSelection={handleSelection} />
+        <NavGroup key={index} {...group} selectedItem={selectedItemId} onItemSelection={handleSelection} />
       ))}
     </nav>
   );

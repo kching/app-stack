@@ -2,16 +2,16 @@
   {
     "items": [
       {
+        "label": "Landing",
+        "url": "/"
+      },
+      {
         "label": "Main",
         "url": "/main"
       },
       {
         "label": "Another",
         "url": "/main/another"
-      },
-      {
-        "label": "Landing",
-        "url": "/"
       }
     ]
   },
