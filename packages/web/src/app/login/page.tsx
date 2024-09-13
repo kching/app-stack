@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
 
   return (
     <section className="h-screen flex flex-col items-center justify-center">
-      <div className="w-[480px]">
+      <div className="w-[70%] max-w-sm">
         <LoginStatus successUrl="/main" loginForm={LoginForm} />
       </div>
     </section>

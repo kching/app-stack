@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { SignInResponse } from 'next-auth/react';
+import { useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 
 const FormSchema = z.object({
   username: z.string().trim().min(1, {
@@ -28,6 +30,8 @@ export type LoginFormProps = {
 };
 
 export default function LoginForm({ onLoginSuccess, onLoginFailed }: LoginFormProps) {
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
   const form = useForm({
     resolver: zodResolver(FormSchema),
     defaultValues: {
@@ -40,6 +44,7 @@ export default function LoginForm({ onLoginSuccess, onLoginFailed }: LoginFormPr
     const { username, password } = data;
 
     try {
+      setSubmitting(true);
       const response = await signIn('credentials', {
         username,
         password,
@@ -52,6 +57,8 @@ export default function LoginForm({ onLoginSuccess, onLoginFailed }: LoginFormPr
       }
     } catch (error: any) {
       onLoginFailed(error as unknown as Error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -91,6 +98,7 @@ export default function LoginForm({ onLoginSuccess, onLoginFailed }: LoginFormPr
           <div className="flex flex-row-reverse justify-center">
             <Button type="submit" className="hover:scale-110 hover:bg-cyan-700" disabled={form.formState.isSubmitting}>
               Login
+              {submitting && <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />}
             </Button>
           </div>
         </form>
