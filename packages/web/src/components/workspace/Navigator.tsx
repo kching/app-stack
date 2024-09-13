@@ -7,7 +7,6 @@ import { NavItemAttributes } from './NavItem';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { MenuIcon } from 'lucide-react';
-import { boolean } from 'zod';
 
 type NavigatorProps = HTMLAttributes<HTMLElement> & {
   navGroups: NavGroupAttributes[];
@@ -32,7 +31,7 @@ const Navigator = ({ className, selectedItem, navGroups, onChange }: NavigatorPr
     }
   };
   return (
-    <nav className={`space-y-4 ${className}`}>
+    <nav className={`${className}`}>
       {navGroups.map((group, index) => (
         <NavGroup key={index} {...group} selectedItem={selectedItemId} onSelection={handleSelection} />
       ))}

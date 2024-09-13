@@ -17,7 +17,7 @@ const Workspace = ({ navGroups, children }: WorkspaceProps) => {
           <MobileNav navGroups={navGroups} />
         </div>
         <div className="overflow-y-auto">
-          <Navigator className="hidden md:block p-2 min-w-[160px]" navGroups={navGroups} />
+          <Navigator className="hidden md:block px-2 min-w-[160px]" navGroups={navGroups} />
         </div>
       </div>
       <PageStateProvider>

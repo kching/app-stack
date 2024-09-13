@@ -21,7 +21,7 @@ const CollapsibleDecorator = ({ children, label, expanded }: CollapsibleDecorato
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
       <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="px-4 w-full justify-start">
+        <Button variant="ghost" size="sm" className="px-4 py-2 h-9 w-full justify-start">
           <h4 className="text-sm">
             <span>{label}</span>
           </h4>
