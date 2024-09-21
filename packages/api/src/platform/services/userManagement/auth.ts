@@ -108,10 +108,10 @@ export const jwt = () => {
       });
       if (user) {
         const securityContext = new SecurityContext(user.uid);
-        return {
+        done(null, {
           userUid: user.uid,
           securityContext,
-        };
+        });
       } else {
         done(null, null);
       }

@@ -3,7 +3,6 @@ import { NavGroupAttributes } from '@/components/workspace/NavGroup';
 import Navigator, { MobileNav } from '@/components/workspace/Navigator';
 import HeaderBar from '@/components/workspace/HeaderBar';
 import PageStateProvider from '@/components/workspace/PageStateProvider';
-import { SessionProvider } from 'next-auth/react';
 
 type WorkspaceProps = PropsWithChildren<{
   navGroups: NavGroupAttributes[];
