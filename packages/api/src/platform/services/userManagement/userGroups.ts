@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { Service } from '../../plugin';
 import { findAuthByScheme, UserContext } from './auth';
 import { AccessDeniedError } from '../../errors';
-import * as runtime from '../../../../prisma/generated/platformClient/runtime/library';
+import * as runtime from '../../../generated/prisma/platformClient/runtime/library';
 import { publish } from '../../events';
 import { Permissions, SecurityContext } from '../../accessControl';
 import { assignPermission } from './permissions';

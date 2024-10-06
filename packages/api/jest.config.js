@@ -6,5 +6,5 @@ module.exports = {
   clearMocks: true,
   collectCoverage: true,
   coverageReporters: ['json', 'html'],
-  collectCoverageFrom: ['src/**/*.ts', '!**/node_modules/**'],
+  collectCoverageFrom: ['src/**/*.ts', '!**/node_modules/**', '!src/generated/**'],
 };
