@@ -582,7 +582,7 @@ export async function init(this: Service) {
     }
   });
 
-  this.useEndpoint('delete', '/groups:/uid', async (req, res) => {
+  this.useEndpoint('delete', '/groups/:uid', async (req, res) => {
     const securityContext = (req.user as UserContext)?.securityContext;
     const { uid } = req.params;
     try {
