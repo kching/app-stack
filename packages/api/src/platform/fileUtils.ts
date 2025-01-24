@@ -2,8 +2,12 @@ import fs, { Dirent } from 'fs';
 import path from 'path';
 import { parse } from 'yaml';
 
-const isTestFile = (entry: Dirent) => {
-  return (entry.isFile() && entry.name.endsWith('.test.ts')) || (entry.isDirectory() && entry.name === '__tests__');
+export const isTestFile = (entry: Dirent) => {
+  return (
+    (entry.isFile() && entry.name.endsWith('.test.ts')) ||
+    (entry.isFile() && entry.name.endsWith('.test.js')) ||
+    (entry.isDirectory() && entry.name === '__tests__')
+  );
 };
 
 export const scanForFiles = async (

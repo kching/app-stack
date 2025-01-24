@@ -109,6 +109,7 @@ class NotificationContext {
   }
 }
 
+// TODO: this is not very nice, use subscriptions service instead.
 export const subscribeContactToEvent = async (
   securityContext: SecurityContext,
   eventName: string,

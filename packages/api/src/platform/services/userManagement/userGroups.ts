@@ -9,7 +9,6 @@ import * as runtime from '../../../generated/prisma/platformClient/runtime/libra
 import { publish } from '../../events';
 import { Permissions, SecurityContext } from '../../accessControl';
 import { assignPermission } from './permissions';
-import subscriptionRepository from '../notifications/subscriptionRepository';
 import { pick } from 'lodash';
 import { subscribeContactToEvent } from '../notifications';
 
@@ -87,46 +86,49 @@ export const createUser = async (
   const createUserAllowed = await securityContext.hasPermissions(Permissions.CREATE, 'user/*');
   const assignPermissionsAllowed = await securityContext.hasPermissions(Permissions.UPDATE, 'permission/*');
   if (createUserAllowed && assignPermissionsAllowed) {
-    const user = await prisma.$transaction(async (tx) => {
-      const exists = await tx.authScheme.findFirst({
-        include: {
-          user: true,
-        },
-        where: {
-          scheme,
-          username,
-        },
-      });
-      if (!exists) {
-        const user = await tx.user.create({
-          data: {
-            authSchemes: {
-              create: {
-                scheme,
-                username,
-                secret,
-              },
-            },
-            createdByUid: securityContext.principalUid,
+    const user = await prisma.$transaction(
+      async (tx) => {
+        const exists = await tx.authScheme.findFirst({
+          include: {
+            user: true,
+          },
+          where: {
+            scheme,
+            username,
           },
         });
-        if (emailAddress != null) {
-          emailAddress = emailAddress.trim().toLowerCase();
-          await tx.contact.create({
+        if (!exists) {
+          const user = await tx.user.create({
             data: {
-              userId: user.id,
-              ownerUid: user.uid,
-              channel: 'email',
-              address: emailAddress,
-              primary: true,
+              authSchemes: {
+                create: {
+                  scheme,
+                  username,
+                  secret,
+                },
+              },
+              createdByUid: securityContext.principalUid,
             },
           });
+          if (emailAddress != null) {
+            emailAddress = emailAddress.trim().toLowerCase();
+            await tx.contact.create({
+              data: {
+                userId: user.id,
+                ownerUid: user.uid,
+                channel: 'email',
+                address: emailAddress,
+                primary: true,
+              },
+            });
+          }
+          return user;
+        } else {
+          return exists.user;
         }
-        return user;
-      } else {
-        return exists.user;
-      }
-    });
+      },
+      { maxWait: 10000, timeout: 10000 }
+    );
 
     const contact = await prisma.contact.findFirst({
       where: {
@@ -365,68 +367,66 @@ export const updateGroupMembership = async (
   const resourceId = `group/${groupUid}`;
   const allowed = await securityContext.hasPermissions(Permissions.UPDATE, resourceId);
   if (allowed) {
-    return prisma.$transaction(async (tx) => {
-      const group = await findGroupByUid(securityContext, groupUid);
-      if (!group) {
-        getLogger('userGroups').error(`addUserToGroup(): Group/${groupUid} not found`);
-        throw new Error(`Group/${groupUid} not found`);
-      }
-      await Promise.allSettled(
-        memberUpdates
-          .filter(({ userUid }) => userUid != null)
-          .map(async ({ action, userUid }) => {
-            const user = await tx.user.findUnique({ where: { uid: userUid } });
-            if (user) {
-              switch (action) {
-                case 'CREATE':
-                  return tx.userGroup.upsert({
-                    where: {
-                      userId_groupId: {
-                        userId: user.id,
-                        groupId: group.id,
-                      },
-                    },
-                    create: {
-                      userId: user.id,
-                      groupId: group.id,
-                      createdByUId: securityContext.principalUid,
-                    },
-                    update: {
+    const group = await findGroupByUid(securityContext, groupUid);
+    if (!group) {
+      getLogger('userGroups').error(`addUserToGroup(): Group/${groupUid} not found`);
+      throw new Error(`Group/${groupUid} not found`);
+    }
+    await Promise.allSettled(
+      memberUpdates
+        .filter(({ userUid }) => userUid != null)
+        .map(async ({ action, userUid }) => {
+          const user = await prisma.user.findUnique({ where: { uid: userUid } });
+          if (user) {
+            switch (action) {
+              case 'CREATE':
+                return prisma.userGroup.upsert({
+                  where: {
+                    userId_groupId: {
                       userId: user.id,
                       groupId: group.id,
                     },
-                  });
-                case 'UPDATE':
-                  return tx.userGroup.update({
-                    where: {
-                      userId_groupId: {
-                        userId: user.id,
-                        groupId: group.id,
-                      },
-                    },
-                    data: {
+                  },
+                  create: {
+                    userId: user.id,
+                    groupId: group.id,
+                    createdByUId: securityContext.principalUid,
+                  },
+                  update: {
+                    userId: user.id,
+                    groupId: group.id,
+                  },
+                });
+              case 'UPDATE':
+                return prisma.userGroup.update({
+                  where: {
+                    userId_groupId: {
                       userId: user.id,
                       groupId: group.id,
                     },
-                  });
-                case 'DELETE':
-                  return tx.userGroup.delete({
-                    where: {
-                      userId_groupId: {
-                        userId: user.id,
-                        groupId: group.id,
-                      },
+                  },
+                  data: {
+                    userId: user.id,
+                    groupId: group.id,
+                  },
+                });
+              case 'DELETE':
+                return prisma.userGroup.delete({
+                  where: {
+                    userId_groupId: {
+                      userId: user.id,
+                      groupId: group.id,
                     },
-                  });
-              }
-            } else {
-              getLogger('userGroups').warn(`User/${userUid} not found`);
-              return null;
+                  },
+                });
             }
-          })
-      );
-      publish('resource.group', { status: 'UPDATED', resourceId: group.uid });
-    });
+          } else {
+            getLogger('userGroups').warn(`User/${userUid} not found`);
+            return null;
+          }
+        })
+    );
+    publish('resource.group', { status: 'UPDATED', resourceId: group.uid });
   } else {
     throw new AccessDeniedError(securityContext, resourceId, Permissions.DELETE);
   }

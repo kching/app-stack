@@ -92,7 +92,7 @@ model AuthScheme {
 
 model Subscription {
   id           Int     @id @default(autoincrement())
-  uid          String  @default(cuid())
+  uid          String  @unique @default(cuid())
   ownerUid     String
   event        String
   enabled      Boolean

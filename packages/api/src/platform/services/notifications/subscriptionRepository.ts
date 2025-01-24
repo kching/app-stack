@@ -1,6 +1,7 @@
-import { platformPrisma, platformPrisma as prisma } from '../../prisma';
+import { platformPrisma } from '../../prisma';
 import { omit, pick } from 'lodash';
 import { Contact } from './notificationRepository';
+import contactRepository from '../userManagement/contactRepository';
 
 export type Subscription = {
   id: number;
@@ -20,6 +21,12 @@ class PrismaSubscriptionsRepository {
 
   constructor(prisma: typeof platformPrisma) {
     this.prisma = prisma;
+  }
+
+  async findSubscriptionByUid(uid: string) {
+    return this.prisma.subscription.findUnique({
+      where: { uid },
+    });
   }
 
   async getSubscriptionsByEvent(recipient: string, eventName: string): Promise<Subscription[]> {
@@ -61,7 +68,7 @@ class PrismaSubscriptionsRepository {
         (contactIds, membership) => contactIds.concat(membership.user.contacts.map((c) => c.id)),
         [] as number[]
       );
-      const subscriptions = await prisma.subscription.findMany({
+      const subscriptions = await this.prisma.subscription.findMany({
         include: {
           contact: true,
         },
@@ -104,7 +111,7 @@ class PrismaSubscriptionsRepository {
   async createSubscription(
     event: string,
     { userUid, channel, address, secret }: Contact,
-    ownerUid: string
+    ownerUid?: string
   ): Promise<Subscription> {
     const user = await this.prisma.user.findUnique({
       where: { uid: userUid },
@@ -114,47 +121,54 @@ class PrismaSubscriptionsRepository {
       const count = await this.prisma.subscription.count({
         where: { ownerUid: userUid },
       });
-      const contact = await this.prisma.contact.upsert({
-        where: {
-          ownerUid_channel_address: {
-            ownerUid: user.uid,
-            channel,
-            address,
+      const contact = await contactRepository.getContactByAddress(userUid, channel, address);
+      if (contact) {
+        const existingSubs = await this.prisma.subscription.findUnique({
+          where: {
+            contactId_event: {
+              contactId: contact.id,
+              event,
+            },
           },
-        },
-        create: {
-          user: { connect: { id: user.id } },
-          ownerUid: ownerUid,
-          address,
-          secret,
-          channel,
-        },
-        update: {},
-      });
-      const subscription = await this.prisma.subscription.upsert({
+        });
+        if (existingSubs) {
+          throw new Error('duplicateSubscription');
+        }
+      }
+      const subscription = await this.prisma.subscription.create({
         include: {
           contact: true,
         },
-        where: {
-          contactId_event: {
-            contactId: contact.id,
-            event,
-          },
-        },
-        create: {
+        data: {
           event,
           enabled: true,
-          ownerUid: userUid,
+          ownerUid: ownerUid ?? userUid,
           displayOrder: count,
-          contact: { connect: { id: contact.id } },
+          contact: {
+            connectOrCreate: {
+              where: {
+                ownerUid_channel_address: {
+                  ownerUid: userUid,
+                  channel,
+                  address,
+                },
+              },
+              create: {
+                user: { connect: { uid: userUid } },
+                ownerUid: userUid,
+                channel,
+                address,
+                secret,
+              },
+            },
+          },
         },
-        update: {},
       });
       return {
         ...pick(subscription, ['id', 'event']),
         contact: {
           userUid: userUid,
-          ...pick(contact, ['channel', 'address', 'secret']),
+          ...pick(subscription.contact, ['channel', 'address', 'secret']),
         },
       };
     } else {
@@ -162,25 +176,25 @@ class PrismaSubscriptionsRepository {
     }
   }
 
-  async deleteSubscription(subscriptionId: number): Promise<Subscription | undefined> {
+  async deleteSubscription(subscriptionUid: string): Promise<Subscription | undefined> {
     const subscription = await this.prisma.subscription.delete({
       include: {
         contact: true,
       },
-      where: { id: subscriptionId },
+      where: { uid: subscriptionUid },
     });
     return {
       ...pick(subscription, ['id', 'event']),
       contact: {
         userUid: subscription.contact.ownerUid,
-        ...pick(subscription.contact, ['channel', 'address', 'secret']),
+        ...pick(subscription.contact, ['channel', 'address']),
       },
     };
   }
 
-  async updateSubscription(subscriptionId: number, updates: SubscriptionUpdates): Promise<Subscription | undefined> {
+  async updateSubscription(subscriptionUid: string, updates: SubscriptionUpdates): Promise<Subscription | undefined> {
     let subscription = await this.prisma.subscription.findUnique({
-      where: { id: subscriptionId },
+      where: { uid: subscriptionUid },
     });
     if (subscription) {
       let updateContact = undefined;
@@ -200,6 +214,7 @@ class PrismaSubscriptionsRepository {
               ownerUid: userUid,
               channel,
               address,
+              secret,
             },
           },
         };
@@ -208,7 +223,7 @@ class PrismaSubscriptionsRepository {
         include: {
           contact: true,
         },
-        where: { id: subscriptionId },
+        where: { uid: subscriptionUid },
         data: {
           ...omit(updates, ['contact']),
           contact: updateContact,
@@ -226,4 +241,4 @@ class PrismaSubscriptionsRepository {
     }
   }
 }
-export default new PrismaSubscriptionsRepository(prisma);
+export default new PrismaSubscriptionsRepository(platformPrisma);

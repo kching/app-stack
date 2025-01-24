@@ -91,7 +91,7 @@ export const initialise = async (
 ) => {
   options = { ...options, platform };
   const pluginFiles = await scanForFiles(extensionLocation, (file) => {
-    return isMatch(file.name, config.app.extensionFilePattern);
+    return isMatch(file.name, config.app.extensionFilePattern, { ignore: config.app.extensionExcludeFilePattern });
   });
   return Promise.allSettled(
     pluginFiles.map(async (pluginPath) => {

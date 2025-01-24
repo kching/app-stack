@@ -17,6 +17,7 @@ export type Config = {
     templateRoot: string;
     proxy?: string;
     extensionFilePattern: string;
+    extensionExcludeFilePattern: string;
     extensionRoots: string[];
   };
   logging: {
