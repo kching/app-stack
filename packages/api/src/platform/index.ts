@@ -116,8 +116,11 @@ export class Platform {
     app.use(json());
     app.use(cookieParser());
     app.use(this._apiRoot, router);
-    httpServer.listen(resolvedPort, () => {
+    httpServer.listen(resolvedPort, async () => {
       getLogger().info(`App server running on port ${resolvedPort}`);
+      if (typeof callBack === 'function') {
+        await callBack(httpServer);
+      }
     });
 
     const handleTermination = (sig: 'SIGINT' | 'SIGQUIT' | 'SIGTERM') => {
@@ -138,10 +141,6 @@ export class Platform {
     process.on('SIGINT', () => handleTermination('SIGINT'));
     process.on('SIGQUIT', () => handleTermination('SIGQUIT'));
     process.on('SIGTERM', () => handleTermination('SIGTERM'));
-
-    if (typeof callBack === 'function') {
-      await callBack(httpServer);
-    }
 
     return this;
   }

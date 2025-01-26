@@ -27,9 +27,20 @@ const jsonDecoder = (event: WebSocket.MessageEvent) => {
   }
   if (event.data instanceof Array) {
     event.data = Buffer.concat(event.data);
-  }
-  if (event.data instanceof Buffer) {
-    event.data = event.data.buffer.slice(event.data.byteOffset, event.data.byteOffset + event.data.byteLength);
+  } else if (event.data instanceof Buffer) {
+    const content = event.data.buffer.slice(event.data.byteOffset, event.data.byteOffset + event.data.byteLength);
+    if (content instanceof ArrayBuffer) {
+      event.data = content;
+    } else if (content instanceof SharedArrayBuffer) {
+      const arrayBuffer = new ArrayBuffer(content.byteLength);
+      let sharedView = new Uint8Array(content);
+      let arrayBufferView = new Uint8Array(arrayBuffer);
+
+      for (let i = 0; i < content.byteLength; i++) {
+        arrayBufferView[i] = sharedView[i];
+      }
+      event.data = arrayBuffer;
+    }
   }
   return JSON.parse(new TextDecoder().decode(event.data as ArrayBuffer));
 };

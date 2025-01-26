@@ -3,6 +3,7 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from './platform/config';
 import { getLogger } from './platform/logger';
 
+const start = Date.now();
 if (config.app.proxy) {
   const proxy = createProxyMiddleware({
     target: config.app.proxy,
@@ -19,8 +20,13 @@ if (config.app.proxy) {
   });
 }
 
-platform.start().then((platform) => {
-  platform.onShutdown(() => {
-    console.log('Application terminated');
+platform
+  .start(async () => {
+    const finished = Date.now();
+    getLogger().info(`Application started in ${finished - start}ms`);
+  })
+  .then((platform) => {
+    platform.onShutdown(() => {
+      console.log('Application terminated');
+    });
   });
-});

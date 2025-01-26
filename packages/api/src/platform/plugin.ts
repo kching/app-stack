@@ -156,7 +156,7 @@ export class Plugin {
   private readonly endpoints: EndpointRegistration[] = [];
   private readonly webSocketProxies: WebSocketEndpoint[] = [];
   private readonly cronTasks: ScheduledTask[] = [];
-  private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: NodeJS.Timeout }[] = [];
+  private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: Timer }[] = [];
   private readonly options: { [key: string]: any } = {};
   private readonly executionContext: Service;
   private readonly init: Promise<string>;
