@@ -2,7 +2,7 @@ import path from 'path';
 import { RequestHandler, Router } from 'express';
 import { getLogger } from './logger';
 import { scanForFiles } from './fileUtils';
-import { UseWebSocketOptions, WebSocketEndpoint, WSServer } from './webSockets';
+import { UseWebSocketOptions, WebSocketEndpoint } from './webSockets';
 import { Logger } from 'winston';
 import { schedule, ScheduledTask } from 'node-cron';
 import passport from 'passport';
@@ -10,12 +10,12 @@ import { config } from './config';
 import { isMatch } from 'micromatch';
 import { clearInterval } from 'node:timers';
 import { Resource } from './resources';
-import { Platform } from './index';
+import { AppServer, Platform } from './index';
 import { validateRequest, ValidationSchema } from './validation';
 
 export type HttpMethod = 'all' | 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
 
-class EndpointRegistration {
+export class Endpoint {
   method: HttpMethod;
   path: string;
   handlers: RequestHandler[];
@@ -62,27 +62,7 @@ type PluginFunction = (this: Service, options?: { [key: string]: any }) => Promi
 
 const logger = getLogger();
 
-const registerEndpoint = (
-  router: Router,
-  { method, path, authProviders, requestBodySchema, handlers }: EndpointRegistration
-) => {
-  if (!path.startsWith('/')) {
-    path = '/' + path;
-  }
-  const func = (router as { [key: string]: any })[method.toLowerCase()];
-  if (typeof func === 'function') {
-    logger.debug(`Registering endpoint ${method.toUpperCase()} ${path}`);
-    const middlewares = [];
-    if (authProviders != null && authProviders.length > 0) {
-      const auth = passport.authenticate(authProviders, { session: false });
-      middlewares.push(auth);
-    }
-    if (requestBodySchema != null) {
-      middlewares.push(validateRequest(requestBodySchema));
-    }
-    func.call(router, path, ...middlewares, ...handlers);
-  }
-};
+const registerEndpoint = (router: Router, { method, path, authProviders, requestBodySchema, handlers }: Endpoint) => {};
 
 export const initialise = async (
   platform: Platform,
@@ -153,7 +133,7 @@ export class PluginInitialisationError extends Error {
 }
 
 export class Plugin {
-  private readonly endpoints: EndpointRegistration[] = [];
+  private readonly endpoints: Endpoint[] = [];
   private readonly webSocketProxies: WebSocketEndpoint[] = [];
   private readonly cronTasks: ScheduledTask[] = [];
   private readonly intervalTasks: { repeat: number; func: () => void; intervalId?: Timer }[] = [];
@@ -164,8 +144,7 @@ export class Plugin {
   private _id;
   private dependsOn: string[] = [];
   private _status: PluginStatus = 'created';
-  private router?: Router;
-  private webSocketServer?: WSServer;
+  private server?: AppServer;
   private startCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
   private stopCallback?: (context?: Service, options?: { [key: string]: any }) => void | Promise<void>;
 
@@ -205,13 +184,8 @@ export class Plugin {
     return this._status;
   }
 
-  withRouter(router: Router) {
-    this.router = router;
-    return this;
-  }
-
-  withWebSocket(webSocketServer: WSServer) {
-    this.webSocketServer = webSocketServer;
+  withServer(server: AppServer | undefined) {
+    this.server = server;
     return this;
   }
 
@@ -226,12 +200,7 @@ export class Plugin {
         this.dependsOn.map((dependency) => {
           const dependPlugin = allPlugins[dependency];
           if (dependPlugin) {
-            if (this.router) {
-              dependPlugin.withRouter(this.router);
-            }
-            if (this.webSocketServer) {
-              dependPlugin.withWebSocket(this.webSocketServer);
-            }
+            dependPlugin.withServer(this.server);
             return dependPlugin.start(dependencyChain);
           } else {
             getLogger(this.id).error(`Failed to start plugin. Dependency ${dependency} not found.`);
@@ -239,15 +208,11 @@ export class Plugin {
           }
         })
       );
-      this.endpoints.forEach((reg) => {
-        if (this.router != null) {
-          registerEndpoint(this.router, reg);
-        }
+      this.endpoints.forEach((endpoint) => {
+        this.server?.registerEndpoint(endpoint);
       });
       this.webSocketProxies.forEach((wsProxy) => {
-        if (this.webSocketServer != null) {
-          this.webSocketServer.register(wsProxy);
-        }
+        this.server?.registerWebSocket(wsProxy);
       });
 
       this.cronTasks.forEach((task) => task.start());
@@ -275,33 +240,19 @@ export class Plugin {
         clearInterval(task.intervalId);
       });
       this.cronTasks.forEach((task) => task.stop());
-      this.endpoints
-        .map((endpoint) => endpoint.path)
-        .forEach((path) => {
-          if (this.router && this.router.stack) {
-            let paths = this.router.stack.map((layer) => layer.route?.path);
-            while (paths.indexOf(path) > -1) {
-              this.router.stack.splice(paths.indexOf(path));
-              paths = this.router.stack.map((layer) => layer.route?.path);
-            }
-          }
-        });
-      this.webSocketProxies.forEach((wsProxy) => {
-        if (this.webSocketServer != null) {
-          this.webSocketServer.unregister(wsProxy);
-        }
-      });
+      this.endpoints.map((endpoint) => this.server?.unregisterEndpoint(endpoint));
+      this.webSocketProxies.forEach((wsProxy) => this.server?.unregisterWebSocket(wsProxy));
       this._status = 'stopped';
     }
   }
 
-  useEndpoint(method: HttpMethod, path: string, ...handlers: RequestHandler[]): EndpointRegistration {
-    const reg = new EndpointRegistration(method, path, handlers);
-    this.endpoints.push(reg);
-    if (this.router && this._status === 'started') {
-      registerEndpoint(this.router, reg);
+  useEndpoint(method: HttpMethod, path: string, ...handlers: RequestHandler[]): Endpoint {
+    const endpoint = new Endpoint(method, path, handlers);
+    this.endpoints.push(endpoint);
+    if (this._status === 'started') {
+      this.server?.registerEndpoint(endpoint);
     }
-    return reg;
+    return endpoint;
   }
 
   useWebSocket(path: string, options: UseWebSocketOptions): WebSocketEndpoint {

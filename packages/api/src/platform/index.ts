@@ -1,27 +1,11 @@
-import express, { Express, json } from 'express';
 import { config } from './config';
-import { createServer } from 'http';
-import cookieParser from 'cookie-parser';
-import { initialise, Plugin, PluginInitialisationError } from './plugin';
+import { Endpoint, initialise, Plugin, PluginInitialisationError } from './plugin';
 import { flatten } from 'lodash';
 import { getLogger } from './logger';
-import passport from 'passport';
-import { jwt } from './services/userManagement/auth';
 import { Server } from 'node:http';
-import { createWebSocketServer } from './webSockets';
+import { WebSocketEndpoint } from './webSockets';
 import { ChainedResourceResolver, PrismaResourceResolver, ResourceResolver } from './resources';
 import { platformPrisma } from './prisma';
-import notifications, { NotificationProvider } from './services/notifications';
-
-const app = express();
-const httpServer = createServer(app);
-const webSocketServer = createWebSocketServer(httpServer);
-
-const router = express.Router({});
-router.use(json());
-router.use(cookieParser());
-router.use(passport.initialize());
-passport.use(jwt());
 
 const startPlugins = async (platform: Platform, roots: string[], options: { [key: string]: any } = {}) => {
   const startedPlugins: Plugin[] = [];
@@ -33,7 +17,7 @@ const startPlugins = async (platform: Platform, roots: string[], options: { [key
     .filter((plugin) => plugin != null);
   for (const plugin of plugins) {
     try {
-      const startedPlugin = await plugin.withRouter(router).withWebSocket(webSocketServer).start();
+      const startedPlugin = await plugin.withServer(platform.server).start();
       if (startedPlugin) {
         startedPlugins.push(startedPlugin);
       }
@@ -51,6 +35,16 @@ const startPlugins = async (platform: Platform, roots: string[], options: { [key
 
 const platformResourceResolver = new PrismaResourceResolver(platformPrisma);
 
+export type AppServer = {
+  registerEndpoint: (endpoint: Endpoint) => void;
+  unregisterEndpoint: (endpoint: Endpoint) => void;
+  registerWebSocket: (wsEndpoint: WebSocketEndpoint) => void;
+  unregisterWebSocket: (wsEndpoint: WebSocketEndpoint) => void;
+
+  start: (apiRoot: string, port?: number, callBack?: (server: Server) => void) => void | Promise<void>;
+  stop: (sig: 'SIGINT' | 'SIGQUIT' | 'SIGTERM') => Promise<'SIGINT' | 'SIGQUIT' | 'SIGTERM'>;
+};
+
 export class Platform {
   private _plugins: { [id: string]: Plugin } = {};
   private _apiRoot = config.app.apiRoot;
@@ -58,6 +52,11 @@ export class Platform {
   private _onShutdown?: () => Promise<void> | void;
 
   private _resourceResolver: ResourceResolver = platformResourceResolver;
+  readonly server: AppServer;
+
+  constructor(server: AppServer) {
+    this.server = server;
+  }
 
   apiRoot(root: string): Platform {
     this._apiRoot = root;
@@ -73,16 +72,6 @@ export class Platform {
     if (resourceResolvers && resourceResolvers.length > 0) {
       this._resourceResolver = new ChainedResourceResolver(...resourceResolvers, platformResourceResolver);
     }
-    return this;
-  }
-
-  withNotificationProvider(channel: string, provider: NotificationProvider) {
-    notifications.use(channel, provider);
-    return this;
-  }
-
-  configure(func: (app: Express) => void) {
-    func(app);
     return this;
   }
 
@@ -110,23 +99,10 @@ export class Platform {
       `${services.length} platform ${services.length < 2 ? 'service' : 'services'} and ` +
         `${extensions.length} extension ${extensions.length < 2 ? 'service' : 'services'} started`
     );
-
-    const resolvedPort = port ?? config.app.port;
-
-    app.use(json());
-    app.use(cookieParser());
-    app.use(this._apiRoot, router);
-    httpServer.listen(resolvedPort, async () => {
-      getLogger().info(`App server running on port ${resolvedPort}`);
-      if (typeof callBack === 'function') {
-        await callBack(httpServer);
-      }
-    });
+    this.server.start(this._apiRoot, port, callBack);
 
     const handleTermination = (sig: 'SIGINT' | 'SIGQUIT' | 'SIGTERM') => {
-      const httpServerShutdown = new Promise((resolve) => {
-        httpServer.close(() => resolve(sig));
-      });
+      const httpServerShutdown = this.server.stop(sig);
       httpServerShutdown
         .then(() => Promise.allSettled(extensions.map((p) => p.stop())))
         .then(() => Promise.allSettled(services.map((service) => service.stop())))
@@ -150,4 +126,4 @@ export class Platform {
   }
 }
 
-export default new Platform();
+export default Platform;
